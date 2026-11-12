@@ -156,6 +156,12 @@ class Feed:
             if len(bucket) > 4000:
                 for k in sorted(bucket)[:-3600]: del bucket[k]
         self._bump(name, "msgs")
+        cb = getattr(self, "on_ex_tick", None)
+        if cb:
+            try:
+                cb(name, mid, t)
+            except Exception:
+                pass
 
     def best_exchg(self):
         """Prefer Binance if fresh (<5s), else Coinbase, else Kraken."""
@@ -873,7 +879,8 @@ class LatencyHunterStrategy(Strategy):
     """Latency hunter (PAPER ONLY). Measures 15s/30s/60s BTC momentum, estimates P(up) from
     recent log-return volatility, and buys the side whose executable ask is at least 6c below
     that probability after taker fees and expected book slippage. Own $100 demo bankroll.
-    At most one entry per window. Does not place real orders."""
+    At most one entry per window. Fed with raw Binance ticks (fastest available);
+    the open reference is the market's Chainlink open. Does not place real orders."""
     name = "latency_hunter"
     min_edge = 0.06
     kelly = 0.50
@@ -886,16 +893,20 @@ class LatencyHunterStrategy(Strategy):
         self.hunter = LatencyHunter()
         self.last_signal = None
         self._last_log_key = None
+        self._lock = threading.Lock()
 
     def on_price(self, price, timestamp):
-        self.hunter.update_price(price, timestamp=timestamp)
+        with self._lock:
+            self.hunter.update_price(price, timestamp=timestamp)
 
     def seed(self, series):
-        for ts, px in series:
-            self.hunter.update_price(px, timestamp=ts)
+        with self._lock:
+            for ts, px in series:
+                self.hunter.update_price(px, timestamp=ts)
 
     def on_fill(self, timestamp):
-        self.hunter.mark_trade(timestamp=timestamp)
+        with self._lock:
+            self.hunter.mark_trade(timestamp=timestamp)
 
     def active(self, el, left):
         # After ~65s of BTC history the engine can fire; it refuses the last 20s itself.
@@ -928,14 +939,15 @@ class LatencyHunterStrategy(Strategy):
         down_bid = self._best(books, "Down", 1)
         down_ask = self._best(books, "Down", 0)
         cost = self._estimated_cost(books)
-        sig = self.hunter.evaluate(
-            market_open_price=m.open_px,
-            seconds_remaining=m.end - time.time(),
-            up_bid=up_bid, up_ask=up_ask,
-            down_bid=down_bid, down_ask=down_ask,
-            estimated_cost=cost,
-        )
-        self.last_signal = sig
+        with self._lock:
+            sig = self.hunter.evaluate(
+                market_open_price=m.open_px,  # official Chainlink window open
+                seconds_remaining=m.end - time.time(),
+                up_bid=up_bid, up_ask=up_ask,
+                down_bid=down_bid, down_ask=down_ask,
+                estimated_cost=cost,
+            )
+            self.last_signal = sig
         key = (sig.action, sig.reason)
         if key != self._last_log_key:
             self._last_log_key = key
@@ -963,7 +975,7 @@ class Bot:
         global FEED
         self.dblock = threading.RLock()
         self.mkt_lock = threading.Lock()
-        self.c = db(); self.feed = Feed(); FEED = self.feed; self.mkts = {}
+        self.c = db(); self.feed = Feed(); FEED = self.feed; self.feed.on_ex_tick = self._on_hunter_ex_tick; self.mkts = {}
         self._stop = threading.Event()
         self._settle_next = {}
         self._settle_fail = {}
@@ -1310,49 +1322,53 @@ class Bot:
                 log("status loop err", traceback.format_exc())
             self._stop.wait(3)
 
+    def _on_hunter_ex_tick(self, name, mid, ts):
+        """Every raw exchange mid. Prefer Binance; other venues only if Binance is stale (>3s)."""
+        if name != "binance":
+            with self.feed.lock:
+                bt, bm = self.feed.ex_last["binance"]
+            if bm is not None and ts - bt <= 3.0:
+                return
+        for s in STRATS:
+            fn = getattr(s, "on_price", None)
+            if callable(fn):
+                fn(mid, ts)
+
     def _seed_hunter_history(self):
-        """Backfill ~120s of 1s BTC ticks so LatencyHunter is warm after a restart."""
+        """Backfill ~120s of 1s Binance mids so LatencyHunter is warm after a restart."""
         now = int(time.time())
-        name, t, mid = self.feed.best_exchg()
-        pts = []
-        if name:
+        pts, src = [], None
+        for name in ("binance", "coinbase", "kraken"):
             xs = self.feed.ex_series(name, now - 120, now)
-            start_ts = now - 120
             if xs and sum(1 for v in xs if v is not None) >= 65:
-                pts = [(float(start_ts + i), float(px)) for i, px in enumerate(xs) if px]
-        if len(pts) < 65:
-            k, _ = self.feed.latest()
-            if k is not None:
-                cl = self.feed.series(k - 120, k)
-                start_ts = k - len(cl) + 1 if cl else k
-                pts = [(float(start_ts + i), float(px)) for i, px in enumerate(cl) if px]
+                pts = [(float(now - 120 + i), float(px)) for i, px in enumerate(xs) if px]
+                src = name
+                break
         if len(pts) < 65:
             return False
         for s in STRATS:
             seed = getattr(s, "seed", None)
             if callable(seed):
                 seed(pts)
-        log(f"hunter seeded {len(pts)} ticks from {pts[0][0]:.0f} to {pts[-1][0]:.0f}")
+        log(f"hunter seeded {len(pts)} {src} ticks from {pts[0][0]:.0f} to {pts[-1][0]:.0f}")
         return True
 
     def _feed_hunter_prices(self):
+        # Primary path is the Binance websocket callback. 1Hz: seed, then backstop if the socket is quiet.
         if not getattr(self, "_hunter_seeded", False):
             self._hunter_seeded = bool(self._seed_hunter_history())
-        nc, src = self.feed.nowcast()
-        if nc is None:
+        now = time.time()
+        with self.feed.lock:
+            bt, bm = self.feed.ex_last["binance"]
+        if bm is not None and now - bt <= 3.0:
             return
         name, t, mid = self.feed.best_exchg()
-        k, cl = self.feed.latest()
-        if src and src != "chainlink" and t:
-            ts = t
-        elif k is not None:
-            ts = float(k)
-        else:
-            ts = time.time()
+        if mid is None or t is None or now - t > 3.0:
+            return
         for s in STRATS:
             fn = getattr(s, "on_price", None)
             if callable(fn):
-                fn(nc, ts)
+                fn(mid, t)
 
     def run(self):
         log("polybot starting (PAPER MODE)")
