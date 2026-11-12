@@ -1,0 +1,21 @@
+# Render Blueprint - PAPER-only polybot (no wallet, no keys, no real funds)
+services:
+  - type: web
+    name: polybot-btc5m
+    runtime: docker
+    plan: free
+    region: frankfurt          # EU: avoids binance.com US geo-block; closest free region to Israel
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: false
+    envVars:
+      - key: MODE
+        value: primary         # box bot already stopped; this is the live paper bot
+      - key: STATE_REPO
+        value: shalevnavon/polybot-state
+      - key: KEEPALIVE_S
+        value: "600"
+      - key: HF_TOKEN          # write token for the private state dataset
+        sync: false
+      - key: PUSH_SECRET       # same secret web_push.py uses for the Vercel site
+        sync: false

@@ -1,0 +1,45 @@
+# caches and bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.venv/
+venv/
+
+# runtime state and databases (never commit live state)
+*.db
+*.db-wal
+*.db-shm
+*.db.gz
+.snap.db
+.restore/
+trades.csv
+status.json
+dashboard_data.json
+price_hist.json
+web/price_hist.json
+app/web/price_hist.json
+bot.log
+stdout.log
+server.log
+web_push.log
+*.ok
+*.pid
+
+# secrets and tokens
+.env
+.env.*
+*.pem
+*.key
+*token*
+*secret*
+.hf_token*
+.vercel_push_token
+hf_token
+HF_TOKEN
+
+# backups and local scratch
+*.bak
+*.bak_*
+*.tmp
+.DS_Store

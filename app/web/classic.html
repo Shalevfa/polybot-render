@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=1280, height=800, initial-scale=1"/>
+<title>BTC 5 דק' · לייב</title>
+<style>
+  :root {
+    --bg: #07090f;
+    --panel: #10141c;
+    --panel2: #161b26;
+    --line: #242b3a;
+    --text: #e8edf7;
+    --muted: #8b93a7;
+    --green: #3dff8a;
+    --green-dim: rgba(61,255,138,.16);
+    --red: #ff4d6a;
+    --red-dim: rgba(255,77,106,.16);
+    --gold: #f5c542;
+    --blue: #5b8cff;
+    --cyan: #22d3ee;
+    --orange: #fb923c;
+    --purple: #a78bfa;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%;
+    min-height: 100%;
+    height: auto;
+    background: var(--bg); color: var(--text);
+    font-family: "Segoe UI", "Noto Sans Hebrew", "Arial Hebrew", Assistant, Arial, sans-serif;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+  body {
+    padding: 8px 10px 12px;
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto auto;
+    gap: 10px;
+    align-content: start;
+  }
+  .mono { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+  header {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    background: linear-gradient(180deg, #141a26, #0e131c);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 8px 16px;
+    min-height: 96px;
+  }
+  .brand { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; }
+  .brand h1 { font-size: 15px; font-weight: 700; letter-spacing: .02em; color: #c9d2e3; }
+  .brand .sub { font-size: 11px; color: var(--muted); }
+  .feed-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; font-weight: 600;
+    padding: 3px 9px; border-radius: 999px;
+    background: #1a2030; color: var(--muted);
+    margin-top: 4px;
+  }
+  .feed-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: #555; }
+  .feed-pill.ok { color: var(--green); background: var(--green-dim); }
+  .feed-pill.ok .dot { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .feed-pill.bad { color: var(--red); background: var(--red-dim); }
+  .feed-pill.bad .dot { background: var(--red); box-shadow: 0 0 8px var(--red); animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: .4; } }
+
+  .prices { display: flex; gap: 22px; align-items: center; justify-content: center; }
+  .metric { text-align: center; }
+  .metric .lbl { font-size: 11px; color: var(--muted); margin-bottom: 2px; }
+  .metric .val { font-size: 34px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
+  .metric .val.sm { font-size: 26px; }
+  .metric.up .val { color: var(--green); }
+  .metric.down .val { color: var(--red); }
+  .lead {
+    margin-top: 3px; font-size: 13px; font-weight: 700;
+    padding: 1px 8px; border-radius: 6px; display: inline-block;
+  }
+  .lead.up { color: var(--green); background: var(--green-dim); }
+  .lead.down { color: var(--red); background: var(--red-dim); }
+
+  .clock-box { text-align: left; direction: ltr; }
+  .clock-box .lbl { font-size: 11px; color: var(--muted); text-align: right; }
+  .clock-box .cd { font-size: 52px; font-weight: 800; letter-spacing: -0.04em; line-height: 1; color: #fff; }
+  .clock-box.warn .cd { color: var(--gold); }
+  .clock-box.hot .cd { color: var(--red); animation: pulse 0.8s infinite; }
+  .clock-box .now { font-size: 11px; color: var(--muted); text-align: right; margin-top: 2px; }
+
+  .mid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.55fr) minmax(260px, 0.9fr);
+    gap: 8px;
+    align-items: stretch;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 8px 10px;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .card h2 {
+    font-size: 11px; font-weight: 600; color: var(--muted);
+    margin-bottom: 4px; letter-spacing: .04em;
+  }
+  .chart-box { display: flex; flex-direction: column; }
+  .chart-frame {
+    width: 100%;
+    height: 300px;
+    flex: 0 0 300px;
+    overflow: hidden;
+    position: relative;
+  }
+  #chart {
+    display: block;
+    width: 100%;
+    height: 300px;
+  }
+
+  .book { display: flex; flex-direction: column; gap: 8px; }
+  .side-row { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 4px; }
+  .side-top { display: flex; justify-content: space-between; align-items: baseline; }
+  .side-name { font-size: 18px; font-weight: 800; }
+  .side-name.up { color: var(--green); }
+  .side-name.down { color: var(--red); }
+  .side-px { font-size: 22px; font-weight: 800; }
+  .bar-wrap {
+    position: relative; height: 28px; border-radius: 7px;
+    background: #0b0e14; overflow: hidden; border: 1px solid #1e2430;
+  }
+  .bar-fill { height: 100%; border-radius: 7px; transition: width .4s ease; }
+  .bar-fill.up { background: linear-gradient(90deg, #14532d, var(--green)); }
+  .bar-fill.down { background: linear-gradient(90deg, #7f1d1d, var(--red)); }
+  .bar-label {
+    position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; font-size: 13px; font-weight: 800; text-shadow: 0 1px 3px #000;
+  }
+  .ba { font-size: 12px; color: var(--muted); }
+  .model-line { font-size: 13px; color: #c9d2e3; padding-top: 2px; border-top: 1px dashed var(--line); }
+  .model-line b { color: var(--gold); font-size: 16px; }
+
+  .team-wrap { display: flex; flex-direction: column; min-width: 0; }
+  .team-wrap h2 { font-size: 12px; color: var(--muted); margin: 0 2px 6px; }
+  .team {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 8px;
+  }
+  .bot {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 8px 10px 7px;
+    display: flex; flex-direction: column; gap: 3px;
+    position: relative;
+    overflow: hidden;
+    min-height: 108px;
+  }
+  .bot::before {
+    content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 4px;
+    background: var(--accent, var(--blue));
+  }
+  .bot .row1 { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+  .bot .name { font-weight: 800; font-size: 14px; direction: ltr; text-align: left; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  .st-pill {
+    font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 999px;
+    white-space: nowrap; max-width: 70%; overflow: hidden; text-overflow: ellipsis;
+  }
+  .st-pill.waiting { background: #1b2130; color: var(--muted); }
+  .st-pill.watching { background: rgba(91,140,255,.18); color: #9ec1ff; animation: pulse 1.6s infinite; }
+  .st-pill.bought { background: var(--green-dim); color: var(--green); }
+  .st-pill.skipped { background: rgba(251,146,60,.16); color: var(--orange); }
+  .bot .doc { font-size: 11px; color: var(--muted); line-height: 1.35; min-height: 28px; }
+  .bot .nums { display: flex; gap: 12px; margin-top: auto; align-items: baseline; }
+  .bot .nums .k { font-size: 10px; color: var(--muted); }
+  .bot .nums .v { font-size: 16px; font-weight: 800; }
+  .bot .nums .pnl.pos { color: var(--green); }
+  .bot .nums .pnl.neg { color: var(--red); }
+  .bot .meta { font-size: 11px; color: var(--muted); }
+
+  .feed-card { display: flex; flex-direction: column; min-height: 180px; }
+  .feed-card h2 { display: flex; justify-content: space-between; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  thead th { color: var(--muted); font-weight: 600; font-size: 10px; text-align: right; padding: 2px 6px; }
+  tbody td { padding: 3px 6px; border-top: 1px solid #1a2030; white-space: nowrap; }
+  tbody tr.win { background: rgba(61,255,138,.07); }
+  tbody tr.loss { background: rgba(255,77,106,.07); }
+  tbody tr.open { background: rgba(245,197,66,.07); }
+  tbody tr.flash { animation: flashrow 1.2s ease; }
+  @keyframes flashrow {
+    0% { background: #3b4a20; }
+    100% { background: transparent; }
+  }
+  .tag { font-weight: 800; font-size: 11px; padding: 0 5px; border-radius: 4px; }
+  .tag.win { color: var(--green); }
+  .tag.loss { color: var(--red); }
+  .tag.open { color: var(--gold); }
+  .scroller { overflow: auto; max-height: 240px; min-height: 120px; }
+  .scroller::-webkit-scrollbar { width: 6px; height: 6px; }
+  .scroller::-webkit-scrollbar-thumb { background: #2a3142; border-radius: 4px; }
+  #err { color: var(--red); font-size: 12px; min-height: 0; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <h1>BTC 5 דק' · דמו לייב</h1>
+      <div class="sub">נייר בלבד, בלי כסף אמיתי · Polymarket Up/Down</div>
+      <div id="feedPill" class="feed-pill"><span class="dot"></span><span id="feedTxt">בודק הזנה…</span></div>
+    </div>
+    <div class="prices">
+      <div class="metric">
+        <div class="lbl">מחיר ביטקוין עכשיו</div>
+        <div class="val mono" id="btcNow">—</div>
+      </div>
+      <div class="metric">
+        <div class="lbl">מחיר לפתיחה · לשבור</div>
+        <div class="val sm mono" id="btcOpen">—</div>
+      </div>
+      <div class="metric" id="diffBox">
+        <div class="lbl">הפרש</div>
+        <div class="val sm mono" id="btcDiff">—</div>
+        <div class="lead" id="leadLbl"></div>
+      </div>
+    </div>
+    <div class="clock-box" id="clockBox">
+      <div class="lbl">לסיום הסיבוב</div>
+      <div class="cd mono" id="countdown">—:—</div>
+      <div class="now mono" id="clockNow"></div>
+    </div>
+  </header>
+
+  <div class="mid">
+    <div class="card chart-box">
+      <h2>מחיר הביטקוין בסיבוב הנוכחי · קו זהב = מחיר הפתיחה · נקודות = קניות</h2>
+      <div id="chartFrame" class="chart-frame">
+        <canvas id="chart"></canvas>
+      </div>
+    </div>
+    <div class="card book">
+      <h2>ספר פקודות · הסתברות השוק</h2>
+      <div class="side-row">
+        <div class="side-top">
+          <span class="side-name up">Up</span>
+          <span class="side-px mono up" id="upPx">—</span>
+        </div>
+        <div class="bar-wrap"><div class="bar-fill up" id="upBar" style="width:0"></div><div class="bar-label mono" id="upPct"></div></div>
+        <div class="ba mono" id="upBA">ביקוש / היצע —</div>
+      </div>
+      <div class="side-row">
+        <div class="side-top">
+          <span class="side-name down">Down</span>
+          <span class="side-px mono down" id="downPx">—</span>
+        </div>
+        <div class="bar-wrap"><div class="bar-fill down" id="downBar" style="width:0"></div><div class="bar-label mono" id="downPct"></div></div>
+        <div class="ba mono" id="downBA">ביקוש / היצע —</div>
+      </div>
+      <div class="model-line">הסתברות המודל ל-Up: <b class="mono" id="modelP">—</b></div>
+    </div>
+  </div>
+
+  <div class="team-wrap">
+    <h2>צוות הבוטים · עובדים יחד על הסיבוב</h2>
+    <div class="team" id="team"></div>
+  </div>
+
+  <div class="card feed-card">
+    <h2>עסקאות אחרונות <span id="err"></span></h2>
+    <div class="scroller">
+      <table>
+        <thead>
+          <tr>
+            <th>שעה</th><th>אסטרטגיה</th><th>צד</th><th>מחיר</th><th>סכום</th><th>תוצאה</th><th>רווח</th>
+          </tr>
+        </thead>
+        <tbody id="trades"></tbody>
+      </table>
+    </div>
+  </div>
+
+<script>
+const COLORS = {
+  late_model: "#5b8cff",
+  late_model_raw: "#a78bfa",
+  early_value: "#f5c542",
+  naive_momentum: "#94a3b8",
+  every_round: "#22d3ee",
+  late_add: "#fb923c"
+};
+function colorOf(name) {
+  if (COLORS[name]) return COLORS[name];
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
+  return `hsl(${h}, 70%, 62%)`;
+}
+function fmtUsd(n, d=2) {
+  if (n == null || Number.isNaN(n)) return "—";
+  return Number(n).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+}
+function fmtPx(n) {
+  if (n == null) return "—";
+  return Number(n).toFixed(2);
+}
+function fmtSigned(n) {
+  if (n == null) return "—";
+  const s = (n >= 0 ? "+" : "") + Number(n).toFixed(2);
+  return s + "$";
+}
+function fmtClock(sec) {
+  sec = Math.max(0, Math.floor(sec));
+  const m = Math.floor(sec / 60), s = sec % 60;
+  return m + ":" + String(s).padStart(2, "0");
+}
+function mid(side) {
+  if (!side) return null;
+  if (side.bid != null && side.ask != null) return (side.bid + side.ask) / 2;
+  return side.ask ?? side.bid ?? null;
+}
+
+let lastTradeSig = "";
+let knownSettled = new Set();
+let htmlVer = null;
+
+function drawChart(d) {
+  const c = document.getElementById("chart");
+  const frame = document.getElementById("chartFrame") || c.parentElement;
+  const rect = frame.getBoundingClientRect();
+  const cssW = Math.max(100, Math.floor(rect.width));
+  const cssH = 300;
+  const ratio = window.devicePixelRatio || 1;
+  if (c.width !== Math.round(cssW * ratio) || c.height !== Math.round(cssH * ratio)) {
+    c.width = Math.round(cssW * ratio);
+    c.height = Math.round(cssH * ratio);
+    c.style.width = "100%";
+    c.style.height = "300px";
+  }
+  const ctx = c.getContext("2d");
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  ctx.clearRect(0, 0, cssW, cssH);
+
+  const w = d.window || {};
+  const start = w.start, end = w.end, open = w.open_px;
+  const series = d.series || [];
+  const markers = d.markers || [];
+  const padL = 62, padR = 12, padT = 10, padB = 22;
+  const iw = cssW - padL - padR, ih = cssH - padT - padB;
+
+  let ys = [];
+  if (open != null) ys.push(open);
+  for (const p of series) {
+    if (p.nowcast != null) ys.push(p.nowcast);
+    if (p.btc != null) ys.push(p.btc);
+  }
+  for (const m of markers) if (m.spot != null) ys.push(m.spot);
+  if (!ys.length) {
+    ctx.fillStyle = "#8b93a7";
+    ctx.font = "13px sans-serif";
+    ctx.fillText("ממתין לנתוני מחיר…", cssW / 2 - 60, cssH / 2);
+    return;
+  }
+  let lo = Math.min(...ys), hi = Math.max(...ys);
+  const span = Math.max(8, hi - lo);
+  lo -= span * 0.18; hi += span * 0.18;
+
+  const xOf = t => padL + ((t - start) / (end - start)) * iw;
+  const yOf = p => padT + (1 - (p - lo) / (hi - lo)) * ih;
+
+  // grid
+  ctx.strokeStyle = "#1c2330";
+  ctx.lineWidth = 1;
+  ctx.fillStyle = "#6b7386";
+  ctx.font = "11px ui-monospace, Menlo, Consolas, sans-serif";
+  ctx.textAlign = "left";
+  const steps = 4;
+  for (let i = 0; i <= steps; i++) {
+    const val = lo + (hi - lo) * (i / steps);
+    const y = yOf(val);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + iw, y); ctx.stroke();
+    ctx.fillText(fmtUsd(val, 0), 4, y + 4);
+  }
+  ctx.textAlign = "center";
+  for (let i = 0; i <= 5; i++) {
+    const t = start + i * 60;
+    const x = xOf(t);
+    ctx.strokeStyle = "#1c2330";
+    ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, padT + ih); ctx.stroke();
+    const mm = new Date(t * 1000).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jerusalem" });
+    ctx.fillStyle = "#6b7386";
+    ctx.fillText(mm, x, cssH - 6);
+  }
+
+  // open line
+  if (open != null) {
+    const y = yOf(open);
+    ctx.strokeStyle = "#f5c542";
+    ctx.setLineDash([5, 4]);
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + iw, y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = "#f5c542";
+    ctx.textAlign = "left";
+    ctx.font = "11px sans-serif";
+    ctx.fillText("פתיחה " + fmtUsd(open, 1), padL + 6, y - 5);
+  }
+
+  // fill between nowcast and open
+  const pts = series.filter(p => (p.nowcast ?? p.btc) != null && p.t >= start && p.t <= end + 1);
+  if (pts.length && open != null) {
+    const yOpen = yOf(open);
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1], b = pts[i];
+      const ya = yOf(a.nowcast ?? a.btc), yb = yOf(b.nowcast ?? b.btc);
+      const xa = xOf(a.t), xb = xOf(b.t);
+      const above = ((a.nowcast ?? a.btc) + (b.nowcast ?? b.btc)) / 2 >= open;
+      ctx.fillStyle = above ? "rgba(61,255,138,.12)" : "rgba(255,77,106,.12)";
+      ctx.beginPath();
+      ctx.moveTo(xa, ya); ctx.lineTo(xb, yb); ctx.lineTo(xb, yOpen); ctx.lineTo(xa, yOpen);
+      ctx.closePath(); ctx.fill();
+    }
+  }
+
+  // price line
+  if (pts.length) {
+    ctx.strokeStyle = "#e8edf7";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    pts.forEach((p, i) => {
+      const x = xOf(p.t), y = yOf(p.nowcast ?? p.btc);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    // live tip
+    const last = pts[pts.length - 1];
+    ctx.fillStyle = (w.leading === "Up") ? "#3dff8a" : (w.leading === "Down" ? "#ff4d6a" : "#e8edf7");
+    ctx.beginPath();
+    ctx.arc(xOf(last.t), yOf(last.nowcast ?? last.btc), 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // trade markers
+  ctx.font = "10px ui-monospace, Menlo, Consolas, sans-serif";
+  const used = [];
+  markers.forEach((m, idx) => {
+    if (m.t < start || m.t > end + 2) return;
+    const yVal = m.spot != null ? m.spot : (open ?? lo);
+    let x = xOf(m.t), y = yOf(yVal);
+    ctx.fillStyle = colorOf(m.strategy);
+    ctx.beginPath();
+    ctx.moveTo(x, y - 8); ctx.lineTo(x + 6, y + 4); ctx.lineTo(x - 6, y + 4);
+    ctx.closePath(); ctx.fill();
+    const label = m.strategy + " " + m.side + " " + Math.round((m.price || 0) * 100) + "¢";
+    // dodge labels
+    let ly = y - 12 - (idx % 3) * 11;
+    if (ly < padT + 10) ly = y + 16;
+    ctx.fillStyle = colorOf(m.strategy);
+    ctx.textAlign = "center";
+    ctx.fillText(label, Math.min(Math.max(x, padL + 40), padL + iw - 40), ly);
+  });
+}
+
+function renderTeam(strats) {
+  const el = document.getElementById("team");
+  el.innerHTML = (strats || []).map(s => {
+    const col = colorOf(s.name);
+    const pnlCls = (s.realized_pnl > 0) ? "pos" : (s.realized_pnl < 0 ? "neg" : "");
+    const wr = s.win_rate != null ? Math.round(s.win_rate * 100) + "%" : "—";
+    return `<div class="bot" style="--accent:${col}">
+      <div class="row1">
+        <div class="name" style="color:${col}">${s.name}</div>
+        <div class="st-pill ${s.state}" title="${s.state_he}">${s.state_he}</div>
+      </div>
+      <div class="doc">${s.doc_he || ""}</div>
+      <div class="nums">
+        <div><div class="k">קופה</div><div class="v mono">${s.bankroll != null ? fmtUsd(s.bankroll) + "$" : "—"}</div></div>
+        <div><div class="k">רווח/הפסד</div><div class="v mono pnl ${pnlCls}">${fmtSigned(s.realized_pnl)}</div></div>
+        <div><div class="k">עסקאות</div><div class="v mono">${s.trades || 0}</div></div>
+      </div>
+      <div class="meta">${s.settled ? (s.wins + " הצלחות מתוך " + s.settled + " · " + wr) : "עדיין בלי סגירות"}</div>
+    </div>`;
+  }).join("");
+}
+
+function renderTrades(rows) {
+  const tb = document.getElementById("trades");
+  const sig = (rows || []).map(r => r.id + ":" + r.settled + ":" + (r.pnl ?? "")).join("|");
+  const isNew = lastTradeSig && sig !== lastTradeSig;
+  const prev = new Set(lastTradeSig.split("|"));
+  lastTradeSig = sig;
+  tb.innerHTML = (rows || []).map(r => {
+    let tag = "פתוחה", cls = "open", tagCls = "open", pnl = "—";
+    if (r.settled) {
+      if ((r.pnl || 0) >= 0) { tag = "ניצחון"; cls = "win"; tagCls = "win"; }
+      else { tag = "הפסד"; cls = "loss"; tagCls = "loss"; }
+      pnl = fmtSigned(r.pnl);
+    }
+    const key = r.id + ":" + r.settled + ":" + (r.pnl ?? "");
+    const flash = isNew && !prev.has(key) ? " flash" : "";
+    return `<tr class="${cls}${flash}">
+      <td class="mono">${r.time || ""}</td>
+      <td style="color:${colorOf(r.strategy)}; font-weight:700; direction:ltr; text-align:right">${r.strategy}</td>
+      <td>${r.side}</td>
+      <td class="mono">${Math.round((r.avg_price || 0) * 100)}¢</td>
+      <td class="mono">${fmtUsd(r.cost)}$</td>
+      <td><span class="tag ${tagCls}">${tag}</span></td>
+      <td class="mono ${tagCls}">${pnl}</td>
+    </tr>`;
+  }).join("");
+}
+
+function apply(d) {
+  const w = d.window || {}, f = d.feed || {}, book = d.book || {};
+  const px = w.nowcast ?? w.btc;
+  document.getElementById("btcNow").textContent = px != null ? "$" + fmtUsd(px, 2) : "—";
+  document.getElementById("btcOpen").textContent = w.open_px != null ? "$" + fmtUsd(w.open_px, 2) : "—";
+  const diffEl = document.getElementById("btcDiff");
+  const box = document.getElementById("diffBox");
+  const lead = document.getElementById("leadLbl");
+  box.className = "metric" + (w.leading === "Up" ? " up" : w.leading === "Down" ? " down" : "");
+  if (w.diff == null) { diffEl.textContent = "—"; lead.textContent = ""; lead.className = "lead"; }
+  else {
+    diffEl.textContent = (w.diff >= 0 ? "+" : "") + fmtUsd(w.diff, 2) + "$";
+    if (w.leading === "Up") { lead.textContent = "Up מוביל"; lead.className = "lead up"; }
+    else { lead.textContent = "Down מוביל"; lead.className = "lead down"; }
+  }
+
+  const cd = document.getElementById("countdown");
+  const cb = document.getElementById("clockBox");
+  cd.textContent = fmtClock(w.left || 0);
+  cb.className = "clock-box" + ((w.left || 0) <= 15 ? " hot" : (w.left || 0) <= 60 ? " warn" : "");
+  document.getElementById("clockNow").textContent = (d.clock || "") + " שעון ישראל";
+
+  const pill = document.getElementById("feedPill");
+  const ft = document.getElementById("feedTxt");
+  if (f.ok && !f.frozen) {
+    pill.className = "feed-pill ok";
+    ft.textContent = "הזנה תקינה" + (f.age_s != null ? " · " + f.age_s + "ש׳" : "");
+  } else {
+    pill.className = "feed-pill bad";
+    ft.textContent = (f.frozen ? "הזנה קפואה" : "הזנה לא תקינה") + " · " + (f.reason_he || "");
+  }
+
+  const up = book.up || {}, down = book.down || {};
+  const upM = mid(up), downM = mid(down);
+  document.getElementById("upPx").textContent = upM != null ? fmtPx(upM) : "—";
+  document.getElementById("downPx").textContent = downM != null ? fmtPx(downM) : "—";
+  const upP = upM != null ? Math.round(upM * 100) : 0;
+  const downP = downM != null ? Math.round(downM * 100) : 0;
+  document.getElementById("upBar").style.width = upP + "%";
+  document.getElementById("downBar").style.width = downP + "%";
+  document.getElementById("upPct").textContent = upM != null ? upP + "%" : "";
+  document.getElementById("downPct").textContent = downM != null ? downP + "%" : "";
+  const ba = (s) => {
+    if (!s) return "ביקוש / היצע —";
+    const b = s.bid != null ? fmtPx(s.bid) : "—";
+    const a = s.ask != null ? fmtPx(s.ask) : "—";
+    return "ביקוש " + b + "  /  היצע " + a;
+  };
+  document.getElementById("upBA").textContent = ba(up);
+  document.getElementById("downBA").textContent = ba(down);
+  const mp = d.model && d.model.p_up;
+  document.getElementById("modelP").textContent = mp != null ? Math.round(mp * 100) + "%" : "—";
+
+  renderTeam(d.strategies);
+  renderTrades(d.recent);
+  drawChart(d);
+  document.getElementById("err").textContent = "";
+  if (d.html_version) {
+    if (htmlVer && d.html_version !== htmlVer) {
+      location.reload();
+      return;
+    }
+    htmlVer = d.html_version;
+  }
+}
+
+let fail = 0;
+async function tick() {
+  try {
+    const r = await fetch("/api/live", { cache: "no-store" });
+    if (!r.ok) throw new Error("http " + r.status);
+    const d = await r.json();
+    fail = 0;
+    apply(d);
+  } catch (e) {
+    fail++;
+    document.getElementById("err").textContent = fail > 1 ? "אין קשר לשרת" : "";
+    if (fail >= 3) {
+      const pill = document.getElementById("feedPill");
+      pill.className = "feed-pill bad";
+      document.getElementById("feedTxt").textContent = "השרת לא מגיב";
+    }
+  }
+}
+tick();
+setInterval(tick, 1000);
+window.addEventListener("resize", () => { /* next tick redraws */ });
+</script>
+</body>
+</html>
