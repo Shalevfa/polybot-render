@@ -17,6 +17,7 @@ import traceback
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
+import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from zoneinfo import ZoneInfo
 
@@ -32,6 +33,11 @@ LOG_PATH = os.path.join(ROOT, "bot.log")
 HIST_PATH = os.path.join(WEB, "price_hist.json")
 INDEX_PATH = os.path.join(WEB, "index.html")
 SIM1000_PATH = os.path.join(WEB, "sim1000.html")
+BOT_PATH = os.path.join(WEB, "bot.html")
+
+sys.path.insert(0, ROOT)
+import bot_settings
+from bot_settings import LIVE
 
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("POLYBOT_DASH_PORT", "8765"))
@@ -49,6 +55,7 @@ STRATEGY_ORDER = [
     "every_round",
     "momentum_late",
     "latency_hunter",
+    "manual",
 ]
 
 # left_lo/hi = seconds remaining; el_lo/hi = seconds elapsed
@@ -61,6 +68,7 @@ ACTIVE = {
     "late_add": {"left_lo": 2, "left_hi": 10},
     "momentum_late": {"left_lo": 10, "left_hi": 90},
     "latency_hunter": {"left_lo": 20, "left_hi": 300},
+    "manual": {},
 }
 
 DOC_HE = {
@@ -72,6 +80,7 @@ DOC_HE = {
     "late_add": "ב-10 השניות האחרונות מוסיפה לעסקה מרוויחה, אם המחיר עדיין עד 95 סנט.",
     "momentum_late": "ב-90 השניות האחרונות מסתכלת על התנועה של 30–60 השניות הקודמות, ונכנסת רק בכיוון המומנטום כשיש פער של 4 סנט לפחות.",
     "latency_hunter": "צייד ההשהיה. מודד מומנטום של 15/30/60 שניות, מעריך את הסיכוי ל-Up, ונכנס רק כשיש יתרון נטו של 6 סנט אחרי עמלה והחלקה.",
+    "manual": "בוט ידני. לא נכנס לבד — קונים Up או Down מעמוד הניהול שלו, בכסף דמו בלבד.",
 }
 
 SKIP_HE = {
@@ -172,6 +181,14 @@ def db_connect() -> sqlite3.Connection:
     c.row_factory = sqlite3.Row
     return c
 
+def live_sql(con: sqlite3.Connection) -> str:
+    """Filter out archived trades when the column exists (read-only safe)."""
+    try:
+        cols = {r[1] for r in con.execute("pragma table_info(trades)").fetchall()}
+    except Exception:
+        return "1=1"
+    return LIVE if "archived" in cols else "1=1"
+
 
 def he_skip(detail: str | None) -> str:
     if not detail:
@@ -186,8 +203,21 @@ def he_skip(detail: str | None) -> str:
     return short[:90] if short else "דילגה"
 
 
-def in_active(name: str, left: float, elapsed: float) -> bool:
-    spec = ACTIVE.get(name)
+def _window_spec(name: str, settings: dict | None = None) -> dict:
+    spec = dict(ACTIVE.get(name) or {})
+    cfg = settings or {}
+    for k in ("left_lo", "left_hi", "el_lo", "el_hi"):
+        if k in cfg and cfg[k] is not None:
+            try:
+                spec[k] = float(cfg[k])
+            except (TypeError, ValueError):
+                pass
+    return spec
+
+def in_active(name: str, left: float, elapsed: float, settings: dict | None = None) -> bool:
+    if name == "manual":
+        return False
+    spec = _window_spec(name, settings)
     if not spec:
         return False
     if "left_lo" in spec and not (spec["left_lo"] <= left <= spec["left_hi"]):
@@ -199,8 +229,10 @@ def in_active(name: str, left: float, elapsed: float) -> bool:
     return False
 
 
-def before_active(name: str, left: float, elapsed: float) -> bool:
-    spec = ACTIVE.get(name)
+def before_active(name: str, left: float, elapsed: float, settings: dict | None = None) -> bool:
+    if name == "manual":
+        return False
+    spec = _window_spec(name, settings)
     if not spec:
         return True
     if "el_lo" in spec and elapsed < spec["el_lo"]:
@@ -513,6 +545,7 @@ def build_payload() -> dict:
 
     reset_hist(slug)
     con = db_connect()
+    trades_by_strategy = {}
     try:
         seed_from_db(slug, start, con)
         open_px, open_src = resolve_open_px(slug, start, con)
@@ -544,7 +577,7 @@ def build_payload() -> dict:
         recent_rows = con.execute(
             """select id, ts, time, slug, strategy, side, shares, avg_price, cost, fee,
                       model_p, edge, secs_left, outcome, pnl, settled, settled_time, open_px, spot
-               from trades order by id desc limit 15"""
+               from trades where {live} order by id desc limit 15""".format(live=live_sql(con))
         ).fetchall()
         recent = []
         for r in recent_rows:
@@ -567,7 +600,7 @@ def build_payload() -> dict:
 
         open_rows = con.execute(
             """select id, strategy, side, shares, avg_price, cost, model_p, secs_left, ts, time
-               from trades where slug=? and settled=0 order by id""",
+               from trades where slug=? and settled=0 and {live} order by id""".format(live=live_sql(con)),
             (slug,),
         ).fetchall()
         open_by = {}
@@ -587,7 +620,7 @@ def build_payload() -> dict:
         markers = []
         for r in con.execute(
             """select ts, strategy, side, avg_price, cost, shares, spot
-               from trades where slug=? order by ts""",
+               from trades where slug=? and {live} order by ts""".format(live=live_sql(con)),
             (slug,),
         ):
             markers.append({
@@ -623,22 +656,35 @@ def build_payload() -> dict:
             if not bought:
                 # trade this slug even if somehow settled
                 tr = con.execute(
-                    "select id, side, shares, avg_price, cost from trades where slug=? and strategy=? order by id desc limit 1",
+                    f"select id, side, shares, avg_price, cost from trades where slug=? and strategy=? and {live_sql(con)} order by id desc limit 1",
                     (slug, name),
                 ).fetchone()
                 if tr:
                     bought = [dict(tr)]
 
+            run_mode = s.get("run_mode") or ("active" if s else "active")
+            cfg = s.get("settings") or {}
             if bought:
                 bits = []
                 for o in bought:
                     bits.append(f"קנתה {o['side']} ב-{o['avg_price']*100:.0f}¢ · ${o['cost']:.2f}")
                 state = "bought"
                 state_he = " · ".join(bits)
+                if run_mode == "off":
+                    state_he = "כבוי · " + state_he
+                elif run_mode == "paused":
+                    state_he = "מושהה · " + state_he
+            elif run_mode == "off":
+                state, state_he = "off", "כבוי"
+            elif run_mode == "paused":
+                state, state_he = "paused", "מושהה"
+            elif name == "manual":
+                state, state_he = "watching", "ידני · ממתין לפקודה"
             else:
                 dec = latest_dec.get(name)
-                active_now = in_active(name, left, elapsed)
-                waiting = before_active(name, left, elapsed)
+                cfg = s.get("settings") or {}
+                active_now = in_active(name, left, elapsed, cfg)
+                waiting = before_active(name, left, elapsed, cfg)
                 if not s and name in STRATEGY_ORDER:
                     # known but not yet in this process's status
                     if waiting:
@@ -674,6 +720,12 @@ def build_payload() -> dict:
                 "state": state,
                 "state_he": state_he,
                 "live": bool(s),
+                "run_mode": s.get("run_mode") or run_mode,
+                "enabled": s.get("enabled", True),
+                "auto_trading": s.get("auto_trading", name != "manual"),
+                "settings": cfg if cfg else (s.get("settings") or None),
+                "schema": bot_settings.schema_for(name) if name in bot_settings.KNOWN else [],
+                "defaults": bot_settings.defaults_for(name) if name in bot_settings.KNOWN else {},
                 "open": [
                     {
                         "side": o["side"],
@@ -683,6 +735,26 @@ def build_payload() -> dict:
                     }
                     for o in opens
                 ],
+            })
+
+        trades_by_strategy = {n: [] for n in list_strategies(status, con)}
+        live = live_sql(con)
+        for r in con.execute(
+            f"""select id, ts, time, slug, strategy, side, shares, avg_price, cost, fee,
+                       model_p, edge, secs_left, outcome, pnl, settled, settled_time
+                from trades where {live} order by id desc limit 800"""
+        ):
+            lst = trades_by_strategy.setdefault(r["strategy"], [])
+            if len(lst) >= 80:
+                continue
+            tm = r["time"] or ""
+            lst.append({
+                "id": r["id"], "ts": r["ts"],
+                "time": tm[11:19] if len(tm) >= 19 else tm,
+                "slug": r["slug"], "strategy": r["strategy"], "side": r["side"],
+                "shares": r["shares"], "avg_price": r["avg_price"], "cost": r["cost"],
+                "fee": r["fee"], "pnl": r["pnl"], "settled": int(r["settled"] or 0),
+                "outcome": r["outcome"], "secs_left": r["secs_left"],
             })
 
         with _lock:
@@ -735,6 +807,7 @@ def build_payload() -> dict:
         "markers": markers,
         "strategies": team,
         "recent": recent,
+        "trades_by_strategy": trades_by_strategy,
         "html_version": str(int(os.path.getmtime(INDEX_PATH))),
     }
 
@@ -765,6 +838,10 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path in ("/sim1000", "/sim1000.html"):
                 with open(SIM1000_PATH, "rb") as f:
+                    self._send(200, f.read(), "text/html; charset=utf-8")
+                return
+            if path in ("/bot", "/bot.html") or path.startswith("/bot/"):
+                with open(BOT_PATH, "rb") as f:
                     self._send(200, f.read(), "text/html; charset=utf-8")
                 return
             if path == "/api/live":

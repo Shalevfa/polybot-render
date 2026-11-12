@@ -12,12 +12,14 @@
 """
 from __future__ import annotations
 
-import gzip, json, os, shutil, signal, sqlite3, subprocess, sys, threading, time, traceback
+import gzip, hmac, hashlib, json, os, shutil, signal, sqlite3, subprocess, sys, threading, time, traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import requests
 
 APP = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, APP)
+import bot_settings
 DB = os.path.join(APP, "trades.db")
 CSV = os.path.join(APP, "trades.csv")
 HIST = os.path.join(APP, "web", "price_hist.json")
@@ -113,6 +115,113 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, {"err": "not found", "paths": ["/health", "/status", "/stats", "/api/live"]})
         except Exception as e:
             self._send(500, {"err": repr(e)[:300]})
+
+    def do_POST(self):
+        path = self.path.split("?")[0]
+        try:
+            if path not in ("/admin", "/admin/"):
+                return self._send(404, {"err": "not found"})
+            if not _admin_ok(self):
+                return self._send(401, {"ok": False, "error": "unauthorized"})
+            if not _rate_ok():
+                return self._send(429, {"ok": False, "error": "rate limited"})
+            length = int(self.headers.get("Content-Length") or 0)
+            if length > 50_000:
+                return self._send(413, {"ok": False, "error": "too large"})
+            raw = self.rfile.read(length) if length else b"{}"
+            try:
+                body = json.loads(raw.decode("utf-8") or "{}")
+            except Exception:
+                return self._send(400, {"ok": False, "error": "bad json"})
+            code, obj = _handle_admin(self, body)
+            return self._send(code, obj)
+        except Exception as e:
+            log("admin err", repr(e)[:300])
+            return self._send(500, {"ok": False, "error": "internal"})
+
+
+
+def _admin_ok(handler) -> bool:
+    secret = (os.environ.get("ADMIN_TOKEN") or "").strip()
+    if not secret:
+        return False
+    header = handler.headers.get("Authorization") or ""
+    if not header.startswith("Bearer "):
+        return False
+    got = header[7:].encode("utf-8")
+    exp = secret.encode("utf-8")
+    return hmac.compare_digest(hashlib.sha256(got).digest(), hashlib.sha256(exp).digest())
+
+
+_admin_hits = []
+_admin_lock = threading.Lock()
+
+def _rate_ok() -> bool:
+    now = time.time()
+    with _admin_lock:
+        _admin_hits[:] = [t for t in _admin_hits if now - t < 60]
+        if len(_admin_hits) >= 60:
+            return False
+        _admin_hits.append(now)
+        return True
+
+
+def _handle_admin(handler, body: dict):
+    if not isinstance(body, dict):
+        return 400, {"ok": False, "error": "payload must be an object"}
+    op = body.get("op")
+    name = body.get("name")
+    if op == "ping":
+        return 200, {"ok": True}
+    if op not in ("toggle", "save", "reset_defaults", "reset_bankroll", "buy"):
+        return 400, {"ok": False, "error": "unknown op"}
+    if op == "buy":
+        name = "manual"
+    if not name or name not in bot_settings.KNOWN:
+        return 400, {"ok": False, "error": "unknown strategy"}
+    payload = {}
+    kind = op
+    if op == "toggle":
+        kind = "toggle"
+        if "enabled" in body:
+            payload["enabled"] = bool(body["enabled"])
+        if "auto_trading" in body:
+            payload["auto_trading"] = bool(body["auto_trading"])
+        if not payload:
+            return 400, {"ok": False, "error": "enabled or auto_trading required"}
+    elif op == "save":
+        kind = "set_settings"
+        try:
+            payload = bot_settings.validate(name, body.get("settings") or {}, base=bot_settings.defaults_for(name))
+        except ValueError as e:
+            return 400, {"ok": False, "error": str(e)}
+    elif op == "reset_defaults":
+        kind = "reset_defaults"
+        payload = {}
+    elif op == "reset_bankroll":
+        kind = "reset_bankroll"
+        if body.get("confirm") != "RESET":
+            return 400, {"ok": False, "error": "confirmation required"}
+        payload = {"confirm": "RESET"}
+    elif op == "buy":
+        kind = "buy"
+        payload = {"side": body.get("side"), "amount": body.get("amount")}
+        if payload["side"] not in ("Up", "Down"):
+            return 400, {"ok": False, "error": "side must be Up or Down"}
+        try:
+            amt = float(payload["amount"])
+        except (TypeError, ValueError):
+            return 400, {"ok": False, "error": "amount must be a number"}
+        if amt < 1 or amt > 100:
+            return 400, {"ok": False, "error": "amount must be between $1 and $100"}
+    c = sqlite3.connect(DB, timeout=30)
+    try:
+        bot_settings.ensure_schema(c)
+        cmd_id = bot_settings.enqueue(c, kind, name, payload)
+    finally:
+        c.close()
+    log("admin enqueued", kind, name, "id", cmd_id)
+    return 200, {"ok": True, "command_id": cmd_id, "op": op, "name": name}
 
 
 def serve():
@@ -231,8 +340,17 @@ def restore():
 def db_sig():
     c = sqlite3.connect(f"file:{DB}?mode=ro", uri=True, timeout=10)
     try:
-        return c.execute("select count(*), coalesce(sum(settled),0), coalesce(max(id),0), "
-                         "coalesce(round(sum(coalesce(pnl,0)),4),0) from trades").fetchone()
+        trades = c.execute("select count(*), coalesce(sum(settled),0), coalesce(max(id),0), "
+                           "coalesce(round(sum(coalesce(pnl,0)),4),0) from trades").fetchone()
+        try:
+            rev = c.execute("select coalesce(max(updated_ts),0) from bot_settings").fetchone()[0]
+        except Exception:
+            rev = 0
+        try:
+            arch = c.execute("select coalesce(sum(archived),0) from trades").fetchone()[0]
+        except Exception:
+            arch = 0
+        return list(trades) + [rev, arch]
     finally:
         c.close()
 
@@ -276,11 +394,18 @@ def sync_loop():
             sig = list(db_sig())
             changed = sig != last_sig
             settled_changed = last_sig is None or sig[1] != last_sig[1] or sig[0] != last_sig[0]
-            if changed and (settled_changed and time.time() - last_up > 45 or time.time() - last_up > 300):
-                up = upload_snapshot("settle" if settled_changed else "periodic")
+            want = os.path.join(APP, ".want_sync")
+            force = os.path.exists(want)
+            if changed and (settled_changed and time.time() - last_up > 45 or time.time() - last_up > 300) or (force and time.time() - last_up > 8):
+                up = upload_snapshot("settle" if settled_changed else ("settings" if force else "periodic"))
                 last_sig, last_up = up, time.time()
                 with lock:
                     state["sync"].update(last_ok=time.strftime("%F %T"), last_sig=up, uploads=state["sync"]["uploads"] + 1, last_err=None)
+                if force:
+                    try:
+                        os.remove(want)
+                    except OSError:
+                        pass
                 log("state synced", up)
             if time.time() - (state["sync"].get("_squash_t") or T0) > 86400:
                 api().super_squash_history(STATE_REPO, repo_type="dataset", commit_message="squash")

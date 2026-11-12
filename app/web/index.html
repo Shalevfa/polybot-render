@@ -182,6 +182,11 @@
   .bot .nums .pnl.pos { color: var(--green); }
   .bot .nums .pnl.neg { color: var(--red); }
   .bot .meta { font-size: 11px; color: var(--muted); }
+  a.bot { text-decoration: none; color: inherit; cursor: pointer; }
+  a.bot:hover { border-color: #3a4560; background: #121826; }
+  .st-pill.off { background: var(--red-dim); color: var(--red); }
+  .st-pill.paused { background: rgba(245,197,66,.16); color: var(--gold); }
+  .run-dot { font-size: 10px; font-weight: 700; margin-right: 6px; }
 
   .feed-card { display: flex; flex-direction: column; min-height: 180px; }
   .feed-card h2 { display: flex; justify-content: space-between; }
@@ -265,7 +270,7 @@
   </div>
 
   <div class="team-wrap">
-    <h2>צוות הבוטים · עובדים יחד על הסיבוב</h2>
+    <h2>צוות הבוטים · עובדים יחד על הסיבוב <span style="font-weight:400;color:var(--muted)">· לחצו על בוט לניהול</span></h2>
     <div class="team" id="team"></div>
   </div>
 
@@ -291,7 +296,9 @@ const COLORS = {
   naive_momentum: "#94a3b8",
   every_round: "#22d3ee",
   late_add: "#fb923c",
-  momentum_late: "#f472b6"
+  momentum_late: "#f472b6",
+  latency_hunter: "#34d399",
+  manual: "#e2e8f0"
 };
 function colorOf(name) {
   if (COLORS[name]) return COLORS[name];
@@ -470,10 +477,14 @@ function renderTeam(strats) {
     const col = colorOf(s.name);
     const pnlCls = (s.realized_pnl > 0) ? "pos" : (s.realized_pnl < 0 ? "neg" : "");
     const wr = s.win_rate != null ? Math.round(s.win_rate * 100) + "%" : "—";
-    return `<div class="bot" style="--accent:${col}">
+    const mode = s.run_mode || "";
+    const modeHe = mode === "off" ? "כבוי" : mode === "paused" ? "מושהה" : mode === "active" ? "פעיל" : "";
+    const pillCls = (mode === "off" || mode === "paused") ? mode : s.state;
+    const pillTxt = (mode === "off" || mode === "paused") ? (modeHe + (s.state_he && s.state !== mode ? " · " + s.state_he : "")) : s.state_he;
+    return `<a class="bot" href="/bot/${encodeURIComponent(s.name)}" style="--accent:${col}">
       <div class="row1">
         <div class="name" style="color:${col}">${s.name}</div>
-        <div class="st-pill ${s.state}" title="${s.state_he}">${s.state_he}</div>
+        <div class="st-pill ${pillCls}" title="${pillTxt}">${pillTxt}</div>
       </div>
       <div class="doc">${s.doc_he || ""}</div>
       <div class="nums">
@@ -482,7 +493,7 @@ function renderTeam(strats) {
         <div><div class="k">עסקאות</div><div class="v mono">${s.trades || 0}</div></div>
       </div>
       <div class="meta">${s.settled ? (s.wins + " הצלחות מתוך " + s.settled + " · " + wr) : "עדיין בלי סגירות"}</div>
-    </div>`;
+    </a>`;
   }).join("");
 }
 

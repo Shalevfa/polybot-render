@@ -19,3 +19,5 @@ services:
         sync: false
       - key: PUSH_SECRET       # same secret web_push.py uses for the Vercel site
         sync: false
+      - key: ADMIN_TOKEN       # admin password for per-bot controls (never in git)
+        sync: false

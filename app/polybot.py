@@ -6,7 +6,9 @@ against the live CLOB order book.
 import json, math, os, signal, sqlite3, threading, time, traceback, csv
 from datetime import datetime, timezone
 import requests, websocket
-from latency_hunter import LatencyHunter
+from latency_hunter import LatencyHunter, HunterConfig
+import bot_settings
+from bot_settings import LIVE
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -618,6 +620,25 @@ def simulate_buy(asks, budget, max_price, min_shares=MIN_SHARES):
     if sh < min_shares: return None
     return dict(shares=round(sh, 2), cost=round(cost, 5), fee=round(fe, 5), avg=cost / sh)
 
+def simulate_sell(bids, shares):
+    """Walk the bid book to sell up to `shares`. Returns proceeds, fee, avg, shares sold."""
+    left = float(shares)
+    proceeds = fe = 0.0
+    for p, sz in bids:
+        can = min(float(sz), left)
+        can = math.floor(can * 100) / 100
+        if can <= 0:
+            break
+        proceeds += can * p
+        fe += fee(can, p)
+        left -= can
+        if left <= 1e-9:
+            break
+    sold = float(shares) - left
+    if sold < 0.01:
+        return None
+    return dict(shares=round(sold, 2), proceeds=round(proceeds, 5), fee=round(fe, 5), avg=proceeds / sold)
+
 # ---------------------------------------------------------------- storage
 def db():
     c = sqlite3.connect(DB, timeout=30, check_same_thread=False)
@@ -631,11 +652,12 @@ def db():
     c.execute("""create table if not exists windows(slug text primary key, start integer, open_px real, close_px real,
         official text, my_twap real, my_spot_end real, check_ok integer, snaps text)""")
     c.execute("""create table if not exists decisions(id integer primary key, ts real, slug text, strategy text, action text, detail text)""")
+    bot_settings.ensure_schema(c)
     c.commit(); return c
 
 CSV_FIELDS = ["id", "time", "slug", "strategy", "side", "shares", "avg_price", "cost", "fee", "model_p", "edge", "spot", "open_px", "secs_left", "outcome", "payout", "pnl", "settled_time"]
 def write_csv(c):
-    rows = c.execute(f"select {','.join(CSV_FIELDS)} from trades order by id").fetchall()
+    rows = c.execute(f"select {','.join(CSV_FIELDS)} from trades where {LIVE} order by id").fetchall()
     with open(CSV, "w", newline="") as f:
         w = csv.writer(f); w.writerow(CSV_FIELDS); w.writerows(rows)
 
@@ -679,30 +701,33 @@ class LateModel(Strategy):
     """PRIMARY. Last 75s..5s: vol model (Binance-nowcast of the Chainlink price) blended 60/40 with the book's own price;
     buy the side whose ask+fee is >= 4c below that fair value."""
     name = "late_model"; min_edge = 0.04; max_disagree = 0.30; w = 0.6; kelly = 0.50; cash_frac_cap = 0.12; min_stake = 3.0
-    def active(self, el, left): return 5 <= left <= 75
+    left_lo = 5; left_hi = 75
+    def active(self, el, left): return self.left_lo <= left <= self.left_hi
     def side_choice(self, m, mp, books): return pick(self, mp, books, self.w, 0.03, 0.97)
 
 class LateModelRaw(Strategy):
     """SHADOW of late_model using the raw model only (no blending). Shows if the model alone beats the book.
     Since 11-Nov 08:50 also subject to the global data-quality gates (freshness, |model-book|<=0.25, price band)."""
     name = "late_model_raw"; min_edge = 0.05; max_disagree = 9; w = 1.0; kelly = 0.50; cash_frac_cap = 0.12; min_stake = 3.0
-    def active(self, el, left): return 5 <= left <= 75
+    left_lo = 5; left_hi = 75
+    def active(self, el, left): return self.left_lo <= left <= self.left_hi
     def side_choice(self, m, mp, books): return pick(self, mp, books, self.w, 0.03, 0.97)
 
 class EarlyValue(Strategy):
     """Mid-window (60s..210s elapsed): fade an over-reacting book - buy the side priced >= 6c under blended fair value."""
     name = "early_value"; min_edge = 0.06; kelly = 0.4; cap = 6.0; cash_frac_cap = 0.08; max_disagree = 0.25; w = 0.5
-    def active(self, el, left): return 60 <= el <= 210
+    el_lo = 60; el_hi = 210
+    def active(self, el, left): return self.el_lo <= el <= self.el_hi
     def side_choice(self, m, mp, books): return pick(self, mp, books, self.w, 0.15, 0.85)
 
 class NaiveMomentum(Strategy):
     """Baseline (no model): with ~60s left, buy whichever side BTC (nowcast) is currently on if its ask <= 0.85. Flat $5."""
-    name = "naive_momentum"; cap = 5.0
-    def active(self, el, left): return 50 <= left <= 65
+    name = "naive_momentum"; cap = 5.0; left_lo = 50; left_hi = 65; MAX_ASK = 0.85
+    def active(self, el, left): return self.left_lo <= left <= self.left_hi
     def side_choice(self, m, mp, books):
         side = "Up" if mp["spot"] >= m.open_px else "Down"
         asks = books[side][0]
-        if not asks or asks[0][0] > 0.85: return None, f"{side} ask too high"
+        if not asks or asks[0][0] > self.MAX_ASK: return None, f"{side} ask too high"
         prob = mp["p"] if side == "Up" else 1 - mp["p"]
         return (side, prob, prob - self.eff(asks[0][0]), asks[0][0]), None
 
@@ -823,7 +848,8 @@ class MomentumLate(Strategy):
     name = "momentum_late"; min_edge = 0.04; cross_edge = 0.06; kelly = 0.50; cash_frac_cap = 0.12; min_stake = 3.0
     max_disagree = 0.30
     K = 0.4; DRIFT_CAP_SD = 0.75; VMIN = 0.20; VMIN_SIG = 0.6; REV_MULT = 1.0; MAX_ASK = 0.95; MIN_ASK = 0.03
-    def active(self, el, left): return 10 <= left <= 90
+    left_lo = 10; left_hi = 90
+    def active(self, el, left): return self.left_lo <= left <= self.left_hi
 
     def side_choice(self, m, mp, books):
         self._skip_key = None; self._feat = None
@@ -886,6 +912,8 @@ class LatencyHunterStrategy(Strategy):
     kelly = 0.50
     cash_frac_cap = 0.08
     min_stake = 3.0
+    left_lo = 20
+    left_hi = 300
     TYPICAL_STAKE = 8.0  # dollars used only to estimate walk-the-book slippage
 
     def __init__(self):
@@ -910,7 +938,7 @@ class LatencyHunterStrategy(Strategy):
 
     def active(self, el, left):
         # After ~65s of BTC history the engine can fire; it refuses the last 20s itself.
-        return left >= 20
+        return left >= self.left_lo
 
     @staticmethod
     def _best(books, side, leg):
@@ -966,7 +994,23 @@ class LatencyHunterStrategy(Strategy):
         return (side, sig.confidence, sig.net_edge, a), None
 
 
-STRATS = [LateModel(), LateModelRaw(), EarlyValue(), NaiveMomentum(), EveryRound(), MomentumLate(), LatencyHunterStrategy()]
+
+class Manual(Strategy):
+    """MANUAL (PAPER ONLY). Does not enter on its own. Place Up/Down paper buys from its page."""
+    name = "manual"
+    min_edge = 0.0
+    kelly = 0.0
+    cap = 20.0
+    cash_frac_cap = 1.0
+    min_stake = 1.0
+    MAX_ASK = 0.99
+    def active(self, el, left):
+        return False
+    def side_choice(self, m, mp, books):
+        return None, "manual: no auto entries"
+
+
+STRATS = [LateModel(), LateModelRaw(), EarlyValue(), NaiveMomentum(), EveryRound(), MomentumLate(), LatencyHunterStrategy(), Manual()]
 PRIMARY = "late_model"
 
 # ---------------------------------------------------------------- bot
@@ -984,10 +1028,14 @@ class Bot:
         self.skip_windows = {s.name: {} for s in STRATS}  # strategy -> reason -> distinct windows
         self._skip_seen = set()
         self.started = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.settings = {}
+        self._settings_rev = None
         with self.dblock:
+            bot_settings.ensure_schema(self.c)
             for s in STRATS:
-                for (slug,) in self.c.execute("select slug from trades where strategy=?", (s.name,)):
+                for (slug,) in self.c.execute(f"select slug from trades where strategy=? and {LIVE}", (s.name,)):
                     s.done.add(slug)
+        self._reload_settings(force=True)
         for s in STRATS:
             if s.name == "late_add":
                 s.open_late_side = self.open_late_side
@@ -997,7 +1045,7 @@ class Bot:
         with self.dblock:
             for name in ("late_model", "late_model_raw"):
                 row = self.c.execute(
-                    "select side from trades where slug=? and strategy=? and settled=0 order by id desc limit 1",
+                    f"select side from trades where slug=? and strategy=? and settled=0 and {LIVE} order by id desc limit 1",
                     (slug, name),
                 ).fetchone()
                 if row:
@@ -1010,8 +1058,268 @@ class Bot:
                 self.mkts[st] = Market(st)
             return self.mkts[st]
 
+
+    _ATTR_MAP = {
+        "min_edge": "min_edge", "kelly": "kelly", "cap": "cap",
+        "cash_frac_cap": "cash_frac_cap", "min_stake": "min_stake",
+        "max_disagree": "max_disagree", "w": "w", "cross_edge": "cross_edge",
+        "max_ask": "MAX_ASK", "min_ask": "MIN_ASK",
+        "preferred_left_hi": "PREFERRED_LEFT_HI", "preferred_left_lo": "PREFERRED_LEFT_LO",
+        "fallback_left_min": "FALLBACK_LEFT_MIN", "typical_stake": "TYPICAL_STAKE",
+        "left_lo": "left_lo", "left_hi": "left_hi", "el_lo": "el_lo", "el_hi": "el_hi",
+    }
+
+    def _reload_settings(self, force=False):
+        with self.dblock:
+            bot_settings.ensure_schema(self.c)
+            rev = bot_settings.settings_rev(self.c)
+            if not force and rev == getattr(self, "_settings_rev", None):
+                return
+            self.settings = bot_settings.load_all(self.c)
+            self._settings_rev = rev
+        for st in STRATS:
+            self._apply_settings(st)
+
+    def _apply_settings(self, st):
+        try:
+            cfg = self.settings.get(st.name) or bot_settings.defaults_for(st.name)
+        except ValueError:
+            return
+        for key, attr in self._ATTR_MAP.items():
+            if key in cfg:
+                setattr(st, attr, cfg[key])
+        if st.name == "latency_hunter" and hasattr(st, "hunter"):
+            kw = {k: cfg[k] for k in bot_settings.HUNTER_CONFIG_KEYS if k in cfg}
+            base = HunterConfig()
+            merged = {**{f: getattr(base, f) for f in base.__dataclass_fields__}, **kw}
+            st.hunter.config = HunterConfig(**{k: merged[k] for k in base.__dataclass_fields__})
+
+    def _can_open(self, st, auto=False):
+        try:
+            cfg = self.settings.get(st.name) or bot_settings.defaults_for(st.name)
+        except ValueError:
+            cfg = {"enabled": True, "auto_trading": True}
+        if not cfg.get("enabled", True):
+            return False
+        if auto and st.name != "manual" and not cfg.get("auto_trading", True):
+            return False
+        if auto and st.name == "manual":
+            return False
+        return True
+
+    def _cfg(self, name):
+        return (self.settings or {}).get(name) or bot_settings.defaults_for(name)
+
+    def _alert(self, name, msg):
+        cfg = self._cfg(name)
+        if cfg.get("alerts"):
+            log(f"ALERT {name}: {msg}")
+
+    def _current_market(self):
+        now = time.time()
+        cur = int(now // WIN * WIN)
+        m = self.mkts.get(cur)
+        if not m or not m.tokens or m.open_px is None or not m.accepting or now >= m.end:
+            return None, now
+        return m, now
+
+    def _process_admin_commands(self):
+        with self.dblock:
+            cmds = bot_settings.pending_commands(self.c)
+        for cmd in cmds:
+            try:
+                result = self._exec_command(cmd)
+                with self.dblock:
+                    bot_settings.finish_command(self.c, cmd["id"], "done", result or {"ok": True})
+            except Exception as e:
+                log("admin cmd err", cmd.get("kind"), cmd.get("strategy"), repr(e)[:200])
+                with self.dblock:
+                    bot_settings.finish_command(self.c, cmd["id"], "error", {"ok": False, "error": str(e)[:300]})
+
+    def _exec_command(self, cmd):
+        kind, name, payload = cmd["kind"], cmd.get("strategy"), cmd.get("payload") or {}
+        if kind in ("set_settings", "reset_defaults", "toggle"):
+            if name not in bot_settings.KNOWN:
+                raise ValueError(f"unknown strategy: {name}")
+            if kind == "reset_defaults":
+                clean = bot_settings.defaults_for(name)
+            elif kind == "toggle":
+                cur = self._cfg(name)
+                if "enabled" in payload:
+                    cur["enabled"] = bool(payload["enabled"])
+                if "auto_trading" in payload:
+                    cur["auto_trading"] = bool(payload["auto_trading"])
+                clean = bot_settings.validate(name, cur)
+            else:
+                cur = self._cfg(name)
+                clean = bot_settings.validate(name, payload, base=cur)
+            with self.dblock:
+                bot_settings.save_one(self.c, name, clean)
+            self._reload_settings(force=True)
+            bot_settings.request_sync(os.path.dirname(os.path.abspath(DB)) if os.path.isabs(DB) else os.getcwd())
+            # ROOT is the bot working dir
+            bot_settings.request_sync(os.path.dirname(os.path.abspath(STATUS)) if STATUS else ".")
+            log(f"settings {kind} {name} mode={bot_settings.run_mode(clean, name)}")
+            return {"ok": True, "settings": clean, "run_mode": bot_settings.run_mode(clean, name)}
+        if kind == "buy":
+            return self._manual_buy(payload.get("side"), payload.get("amount"))
+        if kind == "reset_bankroll":
+            return self._reset_bankroll(name, payload.get("confirm"))
+        raise ValueError(f"unknown command: {kind}")
+
+    def _manual_buy(self, side, amount):
+        if side not in ("Up", "Down"):
+            raise ValueError("side must be Up or Down")
+        try:
+            amount = float(amount)
+        except (TypeError, ValueError):
+            raise ValueError("amount must be a number") from None
+        if amount < 1.0 or amount > 100.0:
+            raise ValueError("amount must be between $1 and $100")
+        if not self._can_open(next(st for st in STRATS if st.name == "manual"), auto=False):
+            raise ValueError("manual bot is off")
+        m, now = self._current_market()
+        if m is None:
+            raise ValueError("no live market currently accepting paper orders")
+        try:
+            books = {sd: book(tok) for sd, tok in m.tokens.items()}
+        except Exception as e:
+            raise ValueError(f"order book unavailable: {e}") from e
+        asks = books.get(side, ([], [], None))[0]
+        if not asks:
+            raise ValueError(f"no {side} asks")
+        cfg = self._cfg("manual")
+        a = asks[0][0]
+        maxp = min(float(cfg.get("max_ask") or 0.99), a + 0.03)
+        with self.dblock:
+            bank = self.bankroll("manual")
+        stake = min(amount, bank, float(cfg.get("cap") or 20), bank)
+        if stake < 1.0:
+            raise ValueError(f"insufficient cash (${bank:.2f})")
+        fill = simulate_buy(asks, stake, maxp, min_shares=1.0)
+        if not fill:
+            raise ValueError(f"could not fill at least 1 share under {maxp:.2f}")
+        mp = p_up(self.feed, m.start, m.open_px) or {}
+        left = m.end - now
+        with self.dblock:
+            self.c.execute("""insert into trades(ts,time,slug,strategy,side,shares,avg_price,cost,fee,model_p,edge,spot,open_px,secs_left)
+                values(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (
+                now, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), m.slug, "manual", side,
+                fill["shares"], round(fill["avg"], 4), fill["cost"], fill["fee"],
+                round(float(mp["p"]), 4) if mp.get("p") is not None else None,
+                None, mp.get("spot"), m.open_px, left))
+            self.c.commit(); write_csv(self.c)
+        log(f"TRADE manual {m.slug} {side} {fill['shares']}sh @{fill['avg']:.3f} cost ${fill['cost']:.2f} fee ${fill['fee']:.3f} left={left:.0f}s (manual paper buy)")
+        self._alert("manual", f"bought {side} {fill['shares']}sh cost ${fill['cost']:.2f}")
+        bot_settings.request_sync(os.path.dirname(os.path.abspath(STATUS)) if STATUS else ".")
+        return {"ok": True, "side": side, "shares": fill["shares"], "avg": fill["avg"],
+                "cost": fill["cost"], "fee": fill["fee"], "slug": m.slug}
+
+    def _reset_bankroll(self, name, confirm):
+        if confirm != "RESET":
+            raise ValueError("confirmation required")
+        if name not in bot_settings.KNOWN:
+            raise ValueError(f"unknown strategy: {name}")
+        stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with self.dblock:
+            bot_settings.ensure_schema(self.c)
+            open_n = self.c.execute(
+                f"select count(*) from trades where strategy=? and settled=0 and {LIVE}", (name,)
+            ).fetchone()[0]
+            if open_n:
+                raise ValueError("cannot reset while positions are open; wait for them to settle")
+            cols = "id,ts,time,slug,side,shares,avg_price,cost,fee,model_p,edge,spot,open_px,secs_left,outcome,payout,pnl,settled,settled_time"
+            rows = self.c.execute(
+                f"select {cols} from trades where strategy=? and {LIVE}", (name,)
+            ).fetchall()
+            for r in rows:
+                self.c.execute(
+                    f"insert into trades_archive(archived_at,reason,strategy,{cols}) values(?,?,?,{','.join(['?']*19)})",
+                    (stamp, "reset_bankroll", name) + tuple(r),
+                )
+            self.c.execute(
+                f"update trades set archived=1, archived_at=?, archive_reason='reset_bankroll' where strategy=? and {LIVE}",
+                (stamp, name),
+            )
+            n = self.c.execute("select changes()").fetchone()
+            self.c.commit(); write_csv(self.c)
+            # allow re-entry in a later window; clear done for this strat
+            for st in STRATS:
+                if st.name == name:
+                    st.done.clear()
+            cash = self.bankroll(name)
+        log(f"RESET bankroll {name}: archived {len(rows)} trades, cash now ${cash:.2f}")
+        self._alert(name, f"bankroll reset to ${cash:.2f}; archived {len(rows)} trades")
+        bot_settings.request_sync(os.path.dirname(os.path.abspath(STATUS)) if STATUS else ".")
+        return {"ok": True, "archived": len(rows), "cash": cash}
+
+    def _risk_exits(self):
+        m, now = self._current_market()
+        if m is None:
+            return
+        with self.dblock:
+            rows = self.c.execute(
+                f"select id, strategy, side, shares, avg_price, cost, fee from trades where settled=0 and {LIVE}"
+            ).fetchall()
+        if not rows:
+            return
+        by = {}
+        for r in rows:
+            by.setdefault(r[1], []).append(r)
+        need = False
+        for st in STRATS:
+            cfg = self._cfg(st.name)
+            if cfg.get("risk_management") and (float(cfg.get("stop_loss") or 0) > 0 or float(cfg.get("take_profit") or 0) > 0):
+                if by.get(st.name):
+                    need = True
+                    break
+        if not need:
+            return
+        try:
+            books = {sd: book(tok) for sd, tok in m.tokens.items()}
+        except Exception as e:
+            log("risk-exit book err", e)
+            return
+        for st in STRATS:
+            cfg = self._cfg(st.name)
+            if not cfg.get("risk_management"):
+                continue
+            sl = float(cfg.get("stop_loss") or 0)
+            tp = float(cfg.get("take_profit") or 0)
+            if sl <= 0 and tp <= 0:
+                continue
+            for tid, name, side, shares, avg, cost, fe in by.get(st.name, []):
+                bids = books.get(side, ([], [], None))[1]
+                if not bids:
+                    continue
+                bid = bids[0][0]
+                why = None
+                if sl > 0 and bid <= avg * (1.0 - sl):
+                    why = "stop_loss"
+                elif tp > 0 and bid >= min(0.99, avg * (1.0 + tp)):
+                    why = "take_profit"
+                if not why:
+                    continue
+                fill = simulate_sell(bids, shares)
+                if not fill or fill["shares"] < shares * 0.99:
+                    log(f"risk-exit {name} #{tid} {why} skipped: not enough bid depth")
+                    continue
+                payout = fill["proceeds"]
+                sell_fee = fill["fee"]
+                pnl = payout - sell_fee - cost - fe
+                with self.dblock:
+                    self.c.execute(
+                        "update trades set outcome=?, payout=?, pnl=?, settled=1, settled_time=?, exit_reason=? where id=? and settled=0",
+                        (f"sold_{why}", payout, round(pnl, 5), datetime.now().strftime("%Y-%m-%d %H:%M:%S"), why, tid),
+                    )
+                    self.c.commit(); write_csv(self.c)
+                log(f"EXIT {why} {name} #{tid} {side} {fill['shares']}sh bid~{fill['avg']:.3f} proceeds ${payout:.2f} fee ${sell_fee:.3f} pnl ${pnl:+.2f}")
+                self._alert(name, f"{why}: sold {side} pnl ${pnl:+.2f}")
+        bot_settings.request_sync(os.path.dirname(os.path.abspath(STATUS)) if STATUS else ".")
+
     def bankroll(self, strat):
-        r = self.c.execute("select coalesce(sum(case when settled=1 then pnl else -(cost+fee) end),0) from trades where strategy=?", (strat,)).fetchone()[0]
+
+        r = self.c.execute(f"select coalesce(sum(case when settled=1 then pnl else -(cost+fee) end),0) from trades where strategy=? and {LIVE}", (strat,)).fetchone()[0]
         return START_BANK + r
 
     def count_skip(self, m, s, reason):
@@ -1154,7 +1462,7 @@ class Bot:
         if not m.tokens or m.open_px is None or now - m.loaded > 60:
             if now - m.loaded > 3: m.load(slow=False)
         if not m.tokens or m.open_px is None or not m.accepting: return
-        act = [s for s in STRATS if m.slug not in s.done and s.active(el, left)]
+        act = [s for s in STRATS if m.slug not in s.done and s.active(el, left) and self._can_open(s, auto=True)]
         due = [x for x in (240, 180, 120, 90, 60, 30, 15) if left <= x and x not in m.snapped and left > x - 10]
         want_snap = bool(due)
         if due: m.snapped.update(due)
@@ -1200,7 +1508,7 @@ class Bot:
     def settle(self):
         now = time.time()
         with self.dblock:
-            rows = self.c.execute("select distinct slug from trades where settled=0").fetchall()
+            rows = self.c.execute(f"select distinct slug from trades where settled=0 and {LIVE}").fetchall()
             wins = self.c.execute("select slug,start from windows where official is null or (official is not null and check_ok is null)").fetchall()
             slugs = {r[0] for r in rows} | {w[0] for w in wins}
         for slug in slugs:
@@ -1247,7 +1555,7 @@ class Bot:
                                "on conflict(slug) do update set close_px=coalesce(excluded.close_px, windows.close_px), official=coalesce(excluded.official, windows.official), my_twap=coalesce(excluded.my_twap, windows.my_twap), my_spot_end=coalesce(excluded.my_spot_end, windows.my_spot_end), check_ok=coalesce(excluded.check_ok, windows.check_ok), open_px=coalesce(windows.open_px, excluded.open_px)",
                                (slug, start, open_px if open_px is not None else ox, close_px, winner, my_twap, my_spot, check))
                 newly = []
-                for tid, side, sh, cost, fe in self.c.execute("select id,side,shares,cost,fee from trades where slug=? and settled=0", (slug,)).fetchall():
+                for tid, side, sh, cost, fe in self.c.execute(f"select id,side,shares,cost,fee from trades where slug=? and settled=0 and {LIVE}", (slug,)).fetchall():
                     payout = sh if side == winner else 0.0
                     pnl = payout - cost - fe
                     self.c.execute("update trades set outcome=?, payout=?, pnl=?, settled=1, settled_time=? where id=?",
@@ -1266,9 +1574,9 @@ class Bot:
             st = {"updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z").strip() + " (Asia/Jerusalem)", "mode": "PAPER - no real money",
                   "primary": PRIMARY, "start_bankroll": START_BANK, "fee_model": f"taker fee = shares*{FEE_RATE}*p*(1-p), rebates ignored", "strategies": {}}
             for s in STRATS:
-                r = self.c.execute("""select count(*), sum(settled), sum(case when settled=1 and pnl>0 then 1 else 0 end),
+                r = self.c.execute(f"""select count(*), sum(settled), sum(case when settled=1 and pnl>0 then 1 else 0 end),
                     coalesce(sum(case when settled=1 then pnl end),0), coalesce(sum(fee),0), coalesce(sum(case when settled=0 then cost+fee end),0),
-                    coalesce(sum(cost+fee),0) from trades where strategy=?""", (s.name,)).fetchone()
+                    coalesce(sum(cost+fee),0) from trades where strategy=? and {LIVE}""", (s.name,)).fetchone()
                 n, ns, w, pnl, fees, openc, vol = r; ns = ns or 0
                 rec = dict(doc=(s.__doc__ or '').strip(), trades=n, settled=ns, wins=w or 0, win_rate=round(w / ns, 3) if ns else None,
                     realized_pnl=round(pnl, 2), fees_paid=round(fees, 3), open_exposure=round(openc, 2), turnover=round(vol, 2),
@@ -1279,6 +1587,13 @@ class Bot:
                     rec["decision_reason"] = sig.reason
                     rec["decision_net_edge"] = round(float(sig.net_edge), 4)
                     rec["decision_confidence"] = round(float(sig.confidence), 4)
+                cfg = (self.settings or {}).get(s.name) or bot_settings.defaults_for(s.name)
+                rec["enabled"] = bool(cfg.get("enabled", True))
+                rec["auto_trading"] = bool(cfg.get("auto_trading", s.name != "manual"))
+                rec["risk_management"] = bool(cfg.get("risk_management", False))
+                rec["alerts"] = bool(cfg.get("alerts", False))
+                rec["run_mode"] = bot_settings.run_mode(cfg, s.name)
+                rec["settings"] = cfg
                 st["strategies"][s.name] = rec
             p = st["strategies"][PRIMARY]
             st.update(bankroll=p["equity_if_open_at_cost"], pnl=p["realized_pnl"], trades=p["trades"], win_rate=p["win_rate"])
@@ -1390,6 +1705,9 @@ class Bot:
                     for st in list(self.mkts):
                         if st + WIN < now - 5: del self.mkts[st]
                 self._feed_hunter_prices()
+                self._reload_settings()
+                self._process_admin_commands()
+                self._risk_exits()
                 self.tick_market(self.mkts[cur])
                 if now - last_lag > 120: self.feed.estimate_lag(); last_lag = now
             except Exception:

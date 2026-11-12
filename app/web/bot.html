@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<meta name="robots" content="noindex"/>
+<meta name="theme-color" content="#07090f"/>
+<title>ניהול בוט · דמו לייב</title>
+<style>
+  :root {
+    --bg: #07090f; --panel: #10141c; --panel2: #161b26; --line: #242b3a;
+    --text: #e8edf7; --muted: #8b93a7; --green: #3dff8a; --green-dim: rgba(61,255,138,.16);
+    --red: #ff4d6a; --red-dim: rgba(255,77,106,.16); --gold: #f5c542; --blue: #5b8cff;
+    --cyan: #22d3ee; --orange: #fb923c; --purple: #a78bfa;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: var(--bg); color: var(--text);
+    font-family: "Segoe UI", "Noto Sans Hebrew", "Arial Hebrew", Assistant, Arial, sans-serif;
+    min-height: 100%;
+  }
+  body { padding: 12px 14px 28px; max-width: 1100px; margin: 0 auto; }
+  .mono { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; direction: ltr; unicode-bidi: isolate; }
+  a { color: var(--blue); }
+  header {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+    background: linear-gradient(180deg, #141a26, #0e131c);
+    border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; margin-bottom: 12px;
+  }
+  header h1 { font-size: 18px; }
+  header .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .back { color: var(--muted); text-decoration: none; font-size: 13px; }
+  .back:hover { color: var(--text); }
+  .pills { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .pill { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; }
+  .pill.active { background: var(--green-dim); color: var(--green); }
+  .pill.off { background: var(--red-dim); color: var(--red); }
+  .pill.paused { background: rgba(245,197,66,.16); color: var(--gold); }
+  .pill.bought { background: var(--green-dim); color: var(--green); }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px 16px; margin-bottom: 12px;
+  }
+  .card h2 { font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+  .stat .k { font-size: 11px; color: var(--muted); }
+  .stat .v { font-size: 20px; font-weight: 800; margin-top: 2px; }
+  .pos { color: var(--green); } .neg { color: var(--red); }
+  .row { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+  .switch {
+    display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;
+  }
+  .switch input { appearance: none; width: 42px; height: 24px; border-radius: 999px;
+    background: #2a3142; position: relative; outline: none; cursor: pointer; transition: .15s; }
+  .switch input:checked { background: #1f6a3f; }
+  .switch input::after {
+    content: ""; position: absolute; top: 3px; right: 3px; width: 18px; height: 18px;
+    background: #fff; border-radius: 50%; transition: .15s;
+  }
+  .switch input:checked::after { right: 21px; }
+  .switch.main input { width: 56px; height: 32px; }
+  .switch.main input::after { width: 24px; height: 24px; top: 4px; }
+  .switch.main input:checked::after { right: 28px; }
+  label.fld { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); min-width: 180px; flex: 1; }
+  input[type=number], input[type=text], input[type=password] {
+    background: var(--panel2); border: 1px solid var(--line); color: var(--text);
+    border-radius: 8px; padding: 8px 10px; font-size: 14px; direction: ltr;
+  }
+  .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px 14px; }
+  .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  button, .btn {
+    border: 0; border-radius: 8px; padding: 8px 14px; font-weight: 700; font-size: 13px;
+    cursor: pointer; font-family: inherit;
+  }
+  .btn-primary { background: var(--blue); color: #071018; }
+  .btn-ghost { background: var(--panel2); color: var(--text); border: 1px solid var(--line); }
+  .btn-danger { background: var(--red-dim); color: var(--red); }
+  .btn-up { background: var(--green-dim); color: var(--green); font-size: 16px; padding: 12px 22px; }
+  .btn-down { background: var(--red-dim); color: var(--red); font-size: 16px; padding: 12px 22px; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .msg { font-size: 13px; margin-top: 8px; min-height: 1.2em; }
+  .ok { color: var(--green); } .err { color: var(--red); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: right; }
+  th { color: var(--muted); font-weight: 600; font-size: 11px; }
+  .tag { font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 999px; }
+  .tag.open { background: rgba(91,140,255,.16); color: #9ec1ff; }
+  .tag.win { background: var(--green-dim); color: var(--green); }
+  .tag.loss { background: var(--red-dim); color: var(--red); }
+  .note { font-size: 12px; color: var(--muted); line-height: 1.5; margin-top: 8px; }
+  dialog {
+    border: 1px solid var(--line); border-radius: 12px; background: var(--panel);
+    color: var(--text); padding: 18px 20px; max-width: 420px; width: calc(100% - 24px);
+  }
+  dialog::backdrop { background: rgba(0,0,0,.65); }
+  dialog h3 { margin-bottom: 8px; }
+  dialog p { font-size: 13px; color: var(--muted); margin-bottom: 12px; line-height: 1.45; }
+  .buy-box { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+  .lock { font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+  <header>
+    <div>
+      <a class="back" href="/">← חזרה ללוח הראשי</a>
+      <h1 id="title">ניהול בוט</h1>
+      <div class="sub" id="doc"></div>
+    </div>
+    <div class="pills">
+      <span class="pill" id="modePill">—</span>
+      <span class="pill" id="statePill">—</span>
+      <span class="lock" id="authState"></span>
+    </div>
+  </header>
+
+  <div class="card">
+    <h2>נתונים וביצועים</h2>
+    <div class="stats" id="stats"></div>
+  </div>
+
+  <div class="card">
+    <h2>הפעלה וכיבוי</h2>
+    <div class="row">
+      <label class="switch main"><input type="checkbox" id="swEnabled"/><span>מתג ראשי — רשאי לפתוח עסקאות חדשות</span></label>
+    </div>
+    <div class="row" style="margin-top:12px" id="autoRow">
+      <label class="switch"><input type="checkbox" id="swAuto"/><span>מסחר אוטומטי</span></label>
+      <label class="switch"><input type="checkbox" id="swRisk"/><span>ניהול סיכונים (סטופ / טייק)</span></label>
+      <label class="switch"><input type="checkbox" id="swAlerts"/><span>התראות ביומן</span></label>
+    </div>
+    <p class="note">כיבוי הבוט עוצר החלטות ועסקאות חדשות בלבד. פוזיציות פתוחות ממשיכות להיסגר כרגיל בסוף הסיבוב. ההיסטוריה וההגדרות לא נמחקות. הכיבוי לא משפיע על בוטים אחרים.</p>
+    <div class="msg" id="toggleMsg"></div>
+  </div>
+
+  <div class="card" id="manualCard" hidden>
+    <h2>קנייה ידנית (כסף דמו)</h2>
+    <div class="buy-box">
+      <label class="fld" style="flex:0 0 160px">סכום ($)<input id="buyAmt" type="number" min="1" max="100" step="0.5" value="5"/></label>
+      <button class="btn-up" id="btnUp" type="button">קנייה · Up (עלייה)</button>
+      <button class="btn-down" id="btnDown" type="button">קנייה · Down (ירידה)</button>
+    </div>
+    <p class="note">הקנייה מדמה הליכה בספר הפקודות החי, עם אותה עמלת טייקר שהאחרים משלמים. רק כשהשוק פתוח לקבלת פקודות, והמתג הראשי דלוק.</p>
+    <div class="msg" id="buyMsg"></div>
+  </div>
+
+  <div class="card">
+    <h2>הגדרות ופרמטרים</h2>
+    <div class="fields" id="fields"></div>
+    <div class="btns">
+      <button class="btn-primary" id="btnSave" type="button">שמירת שינויים</button>
+      <button class="btn-ghost" id="btnResetDef" type="button">איפוס לברירת מחדל</button>
+    </div>
+    <p class="note" id="slNote">סטופ-לוס וטייק-פרופיט כבויים כברירת מחדל (ערך 0). כשניהול סיכונים דלוק ומוגדר ערך גדול מאפס, הבוט ימכור חזרה לביקוש בספר אם מחיר הביקוש יורד או עולה בשיעור הזה ממחיר הכניסה. זו יציאה בנייר בלבד — לא משנה את ברירת המחדל של החזקה עד סוף הסיבוב.</p>
+    <div class="msg" id="saveMsg"></div>
+  </div>
+
+  <div class="card">
+    <h2>איפוס קופה ל-$100</h2>
+    <p class="note">העסקאות הקודמות עוברות לארכיון (לא נמחקות). הקופה חוזרת ל-100 דולר דמו. אי אפשר לאפס כשיש פוזיציה פתוחה. נדרשת סיסמת מנהל ואישור.</p>
+    <div class="btns"><button class="btn-danger" id="btnResetBank" type="button">איפוס קופה</button></div>
+    <div class="msg" id="resetMsg"></div>
+  </div>
+
+  <div class="card">
+    <h2>ספר העסקאות של הבוט הזה בלבד</h2>
+    <div style="overflow:auto">
+      <table>
+        <thead><tr><th>שעה</th><th>סיבוב</th><th>צד</th><th>מחיר</th><th>סכום</th><th>תוצאה</th><th>רווח</th></tr></thead>
+        <tbody id="trades"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <dialog id="pwDialog">
+    <h3>סיסמת מנהל</h3>
+    <p>האתר ציבורי, לכן שינויים (הפעלה, הגדרות, קנייה, איפוס) דורשים סיסמה. היא נשמרת רק בדפדפן הזה (localStorage) ולא נשלחת לקוד הציבורי.</p>
+    <label class="fld">סיסמה<input id="pwInput" type="password" autocomplete="current-password"/></label>
+    <div class="btns">
+      <button class="btn-primary" id="pwSave" type="button">שמירה במחשב זה</button>
+      <button class="btn-ghost" id="pwCancel" type="button">ביטול</button>
+    </div>
+    <div class="msg err" id="pwErr"></div>
+  </dialog>
+
+  <dialog id="confirmDialog">
+    <h3>אישור איפוס קופה</h3>
+    <p>העסקאות של הבוט הזה יישמרו בארכיון ולא יימחקו. הקופה תחזור ל-100 דולר דמו. להמשך הקלידו RESET בתיבה ואשרו.</p>
+    <label class="fld">אישור<input id="confirmInput" type="text" placeholder="RESET" autocomplete="off"/></label>
+    <div class="btns">
+      <button class="btn-danger" id="confirmGo" type="button">איפוס</button>
+      <button class="btn-ghost" id="confirmNo" type="button">ביטול</button>
+    </div>
+    <div class="msg err" id="confirmErr"></div>
+  </dialog>
+
+<script>
+const TOKEN_KEY = "polybot_admin_token";
+const NAMES = {
+  late_model: "הראשית · late_model",
+  late_model_raw: "צל הראשית · late_model_raw",
+  early_value: "ערך מוקדם · early_value",
+  naive_momentum: "מומנטום פשוט · naive_momentum",
+  every_round: "כל סיבוב · every_round",
+  momentum_late: "מומנטום מאוחר · momentum_late",
+  latency_hunter: "צייד השהיה · latency_hunter",
+  manual: "בוט ידני · manual",
+};
+const MODE_HE = { active: "פעיל", off: "כבוי", paused: "מושהה" };
+
+function botName() {
+  const m = location.pathname.match(/\/bot\/([^\/\?]+)/);
+  if (m) return decodeURIComponent(m[1]);
+  return new URLSearchParams(location.search).get("name") || new URLSearchParams(location.search).get("id") || "";
+}
+function token() { return localStorage.getItem(TOKEN_KEY) || ""; }
+function setToken(v) { if (v) localStorage.setItem(TOKEN_KEY, v); else localStorage.removeItem(TOKEN_KEY); }
+function fmtUsd(n, d=2) {
+  if (n == null || Number.isNaN(n)) return "—";
+  return Number(n).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+}
+function fmtSigned(n) {
+  if (n == null) return "—";
+  return (n >= 0 ? "+" : "") + Number(n).toFixed(2) + "$";
+}
+function authLabel() {
+  const el = document.getElementById("authState");
+  el.innerHTML = token()
+    ? 'סיסמה שמורה במחשב זה · <a href="#" id="logout">החלפה / מחיקה</a>'
+    : 'אין סיסמה שמורה · נדרשת לפעולות שינוי';
+  const a = document.getElementById("logout");
+  if (a) a.onclick = (e) => { e.preventDefault(); setToken(""); authLabel(); };
+}
+
+async function needAuth() {
+  if (token()) return true;
+  const d = document.getElementById("pwDialog");
+  document.getElementById("pwErr").textContent = "";
+  document.getElementById("pwInput").value = "";
+  d.showModal();
+  return await new Promise((resolve) => {
+    const ok = () => {
+      const v = document.getElementById("pwInput").value.trim();
+      if (!v) { document.getElementById("pwErr").textContent = "יש להזין סיסמה"; return; }
+      setToken(v); d.close(); authLabel(); resolve(true);
+    };
+    document.getElementById("pwSave").onclick = ok;
+    document.getElementById("pwCancel").onclick = () => { d.close(); resolve(false); };
+    document.getElementById("pwInput").onkeydown = (e) => { if (e.key === "Enter") ok(); };
+  });
+}
+
+async function admin(body) {
+  const r = await fetch("/api/admin", {
+    method: "POST",
+    cache: "no-store",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + token() },
+    body: JSON.stringify(body),
+  });
+  const j = await r.json().catch(() => ({ ok: false, error: "bad response" }));
+  if (r.status === 401) {
+    setToken(""); authLabel();
+    throw new Error("סיסמה שגויה או חסרה");
+  }
+  if (!r.ok || j.ok === false) throw new Error(j.error || ("שגיאה " + r.status));
+  return j;
+}
+
+function message(id, text, ok) {
+  const el = document.getElementById(id);
+  el.className = "msg " + (ok ? "ok" : "err");
+  el.textContent = text || "";
+}
+
+let current = null;
+const NAME = botName();
+
+function renderStats(s) {
+  const wr = s.win_rate != null ? Math.round((s.win_rate <= 1 ? s.win_rate * 100 : s.win_rate)) + "%" : "—";
+  const pnl = s.realized_pnl;
+  const items = [
+    ["קופה (הון)", (s.bankroll != null ? fmtUsd(s.bankroll) + "$" : "—"), ""],
+    ["מזומן", (s.cash != null ? fmtUsd(s.cash) + "$" : "—"), ""],
+    ["רווח / הפסד", fmtSigned(pnl), pnl > 0 ? "pos" : pnl < 0 ? "neg" : ""],
+    ["אחוז הצלחה", wr, ""],
+    ["עסקאות", String(s.trades || 0), ""],
+    ["נסגרו / נצחו", (s.settled || 0) + " / " + (s.wins || 0), ""],
+    ["חשיפה פתוחה", s.open_exposure != null ? fmtUsd(s.open_exposure) + "$" : "—", ""],
+  ];
+  document.getElementById("stats").innerHTML = items.map(([k,v,c]) =>
+    `<div class="stat"><div class="k">${k}</div><div class="v mono ${c}">${v}</div></div>`
+  ).join("");
+}
+
+function renderFields(schema, settings) {
+  const el = document.getElementById("fields");
+  const skip = new Set(["enabled", "auto_trading", "risk_management", "alerts"]);
+  el.innerHTML = (schema || []).filter(f => !skip.has(f.key)).map(f => {
+    const val = settings && settings[f.key] != null ? settings[f.key] : f.default;
+    const lo = f.min != null ? `min="${f.min}"` : "";
+    const hi = f.max != null ? `max="${f.max}"` : "";
+    const step = f.key.indexOf("edge") >= 0 || f.key.indexOf("ask") >= 0 || f.key === "w" || f.key.indexOf("loss") >= 0 || f.key.indexOf("profit") >= 0 || f.key.indexOf("frac") >= 0 || f.key === "kelly" || f.key === "min_confidence" ? "0.01" : "1";
+    return `<label class="fld">${f.label_he}<input type="number" data-key="${f.key}" ${lo} ${hi} step="${step}" value="${val}"/></label>`;
+  }).join("");
+}
+
+function collectSettings(schema, base) {
+  const out = Object.assign({}, base || {});
+  for (const inp of document.querySelectorAll("#fields input[data-key]")) {
+    const v = inp.value;
+    out[inp.dataset.key] = v === "" ? null : Number(v);
+  }
+  out.enabled = document.getElementById("swEnabled").checked;
+  out.auto_trading = document.getElementById("swAuto").checked;
+  out.risk_management = document.getElementById("swRisk").checked;
+  out.alerts = document.getElementById("swAlerts").checked;
+  return out;
+}
+
+function renderTrades(rows) {
+  const tb = document.getElementById("trades");
+  if (!rows || !rows.length) { tb.innerHTML = `<tr><td colspan="7" style="color:#8b93a7">אין עסקאות (לא בארכיון)</td></tr>`; return; }
+  tb.innerHTML = rows.map(r => {
+    let tag = "פתוחה", tagCls = "open", pnl = "—";
+    if (r.settled) {
+      if ((r.pnl || 0) >= 0) { tag = "ניצחון"; tagCls = "win"; }
+      else { tag = "הפסד"; tagCls = "loss"; }
+      if (r.outcome && String(r.outcome).startsWith("sold_")) tag = r.outcome === "sold_stop_loss" ? "סטופ" : "טייק";
+      pnl = fmtSigned(r.pnl);
+    }
+    const slug = (r.slug || "").replace("btc-updown-5m-", "");
+    return `<tr>
+      <td class="mono">${r.time || ""}</td>
+      <td class="mono">${slug}</td>
+      <td>${r.side || ""}</td>
+      <td class="mono">${r.avg_price != null ? Math.round(r.avg_price * 100) + "¢" : "—"}</td>
+      <td class="mono">${fmtUsd(r.cost)}$</td>
+      <td><span class="tag ${tagCls}">${tag}</span></td>
+      <td class="mono ${tagCls}">${pnl}</td>
+    </tr>`;
+  }).join("");
+}
+
+function applyBot(d) {
+  const strats = d.strategies || [];
+  const s = strats.find(x => x.name === NAME);
+  if (!s) {
+    document.getElementById("title").textContent = "בוט לא נמצא: " + NAME;
+    return;
+  }
+  current = s;
+  document.title = "ניהול · " + NAME;
+  document.getElementById("title").textContent = NAMES[NAME] || NAME;
+  document.getElementById("doc").textContent = s.doc_he || s.doc || "";
+  const mode = s.run_mode || "active";
+  const mp = document.getElementById("modePill");
+  mp.className = "pill " + mode;
+  mp.textContent = MODE_HE[mode] || mode;
+  const sp = document.getElementById("statePill");
+  sp.className = "pill " + (s.state || "");
+  sp.textContent = s.state_he || s.state || "";
+  document.getElementById("swEnabled").checked = s.enabled !== false;
+  document.getElementById("swAuto").checked = s.auto_trading != null ? !!s.auto_trading : (NAME !== "manual");
+  document.getElementById("swRisk").checked = !!s.settings && !!s.settings.risk_management;
+  document.getElementById("swAlerts").checked = !!s.settings && !!s.settings.alerts;
+  document.getElementById("manualCard").hidden = NAME !== "manual";
+  renderStats(s);
+  if (s.schema && s.schema.length) renderFields(s.schema, s.settings || s.defaults || {});
+  const rows = (d.trades_by_strategy && d.trades_by_strategy[NAME]) || [];
+  renderTrades(rows);
+}
+
+async function tick() {
+  try {
+    const r = await fetch("/api/data", { cache: "no-store" });
+    const j = await r.json();
+    const d = j.data || j;
+    if (d && d.strategies) applyBot(d);
+  } catch (e) {
+    console.warn(e);
+  }
+}
+
+function waitAndRefresh() { setTimeout(tick, 2000); setTimeout(tick, 5000); }
+
+async function withAuth(fn, msgId) {
+  try {
+    if (!(await needAuth())) return;
+    await fn();
+  } catch (e) {
+    message(msgId, e.message || String(e), false);
+  }
+}
+
+document.getElementById("swEnabled").addEventListener("change", ev => withAuth(async () => {
+  await admin({ op: "toggle", name: NAME, enabled: ev.target.checked });
+  message("toggleMsg", ev.target.checked ? "הבוט הופעל. ייכנס לתוקף תוך שניות." : "הבוט כובה לעסקאות חדשות.", true);
+  waitAndRefresh();
+}, "toggleMsg"));
+
+document.getElementById("swAuto").addEventListener("change", ev => withAuth(async () => {
+  await admin({ op: "toggle", name: NAME, auto_trading: ev.target.checked });
+  message("toggleMsg", ev.target.checked ? "מסחר אוטומטי הופעל." : "מסחר אוטומטי כובה (מושהה).", true);
+  waitAndRefresh();
+}, "toggleMsg"));
+
+document.getElementById("btnSave").addEventListener("click", () => withAuth(async () => {
+  if (!current) return;
+  const settings = collectSettings(current.schema, current.settings || current.defaults);
+  await admin({ op: "save", name: NAME, settings });
+  message("saveMsg", "ההגדרות נשמרו וייכנסו לתוקף מיד. הן נשמרות גם אחרי ריענון והפעלה מחדש של השרת.", true);
+  waitAndRefresh();
+}, "saveMsg"));
+
+document.getElementById("btnResetDef").addEventListener("click", () => withAuth(async () => {
+  await admin({ op: "reset_defaults", name: NAME });
+  message("saveMsg", "ההגדרות אופסו לברירת המחדל המקורית.", true);
+  waitAndRefresh();
+}, "saveMsg"));
+
+function buy(side) {
+  withAuth(async () => {
+    const amount = Number(document.getElementById("buyAmt").value);
+    const j = await admin({ op: "buy", name: "manual", side, amount });
+    message("buyMsg", `נשלחה קנייה ${side} בסכום $${amount}. ` + (j.cost != null ? `מילוי $${j.cost}` : "ממתין לביצוע בבוט…"), true);
+    waitAndRefresh();
+  }, "buyMsg");
+}
+document.getElementById("btnUp").onclick = () => buy("Up");
+document.getElementById("btnDown").onclick = () => buy("Down");
+
+document.getElementById("btnResetBank").onclick = async () => {
+  if (!(await needAuth())) return;
+  const d = document.getElementById("confirmDialog");
+  document.getElementById("confirmInput").value = "";
+  document.getElementById("confirmErr").textContent = "";
+  d.showModal();
+};
+document.getElementById("confirmNo").onclick = () => document.getElementById("confirmDialog").close();
+document.getElementById("confirmGo").onclick = async () => {
+  const v = document.getElementById("confirmInput").value.trim();
+  if (v !== "RESET") { document.getElementById("confirmErr").textContent = "יש להקליד RESET לאישור"; return; }
+  try {
+    const j = await admin({ op: "reset_bankroll", name: NAME, confirm: "RESET" });
+    document.getElementById("confirmDialog").close();
+    message("resetMsg", `הקופה אופסה. ${j.archived != null ? j.archived + " עסקאות בארכיון. " : ""}קופה כעת $${j.cash != null ? j.cash : 100}.`, true);
+    waitAndRefresh();
+  } catch (e) {
+    document.getElementById("confirmErr").textContent = e.message || String(e);
+  }
+};
+
+if (!NAME) {
+  document.getElementById("title").textContent = "חסר מזהה בוט";
+} else {
+  authLabel();
+  tick();
+  setInterval(tick, 4000);
+}
+</script>
+</body>
+</html>

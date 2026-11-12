@@ -34,6 +34,9 @@ TZ = ZoneInfo("Asia/Jerusalem")
 ZONE_LABEL = "שעון ישראל"
 START_BANKROLL = 100.0
 STATUS_STALE_AFTER_S = 60.0
+import bot_settings
+from bot_settings import LIVE
+
 STRATEGY_ORDER = [
     "late_model",
     "late_model_raw",
@@ -42,6 +45,7 @@ STRATEGY_ORDER = [
     "every_round",
     "momentum_late",
     "latency_hunter",
+    "manual",
 ]
 GATE_REASON_HE = {
     "ok": "תקינה",
@@ -136,11 +140,14 @@ def load_trades() -> list[dict]:
     con.row_factory = sqlite3.Row
     try:
         con.execute("PRAGMA busy_timeout=5000")
+        cols = {r[1] for r in con.execute("pragma table_info(trades)").fetchall()}
+        where = "WHERE coalesce(archived,0)=0" if "archived" in cols else ""
         rows = con.execute(
-            """
+            f"""
             SELECT id, ts, time, slug, strategy, side, shares, avg_price, cost, fee,
                    model_p, edge, secs_left, outcome, pnl, settled, settled_time
             FROM trades
+            {where}
             ORDER BY COALESCE(ts, id), id
             """
         ).fetchall()
@@ -342,6 +349,10 @@ def build() -> dict:
                 "wins": int(v.get("wins") or 0),
                 "win_rate": None if wr is None else r2(float(wr) * 100.0),
                 "open_trades": max(0, int(v.get("trades") or 0) - int(v.get("settled") or 0)),
+                "run_mode": v.get("run_mode"),
+                "enabled": v.get("enabled"),
+                "auto_trading": v.get("auto_trading"),
+                "settings": v.get("settings"),
             }
         )
 
@@ -375,6 +386,10 @@ def build() -> dict:
             "wins": s["wins"],
             "win_rate": s["win_rate"],
             "open_trades": s["open_trades"],
+            "run_mode": s.get("run_mode"),
+            "enabled": s.get("enabled"),
+            "auto_trading": s.get("auto_trading"),
+            "settings": s.get("settings"),
         }
         for s in strategies
     ]
