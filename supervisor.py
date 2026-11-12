@@ -285,6 +285,48 @@ def api():
     return HfApi(token=HF_TOKEN)
 
 
+
+def _settings_payload():
+    c = sqlite3.connect(DB, timeout=10)
+    try:
+        bot_settings.ensure_schema(c)
+        rows = c.execute("select strategy, payload from bot_settings").fetchall()
+        bots = {}
+        for name, raw in rows:
+            try:
+                bots[name] = json.loads(raw)
+            except Exception:
+                pass
+        return {"at": time.strftime("%F %T %Z"), "bots": bots}
+    except Exception:
+        return {"at": time.strftime("%F %T %Z"), "bots": {}}
+    finally:
+        c.close()
+
+
+def _restore_settings_file(path):
+    if not os.path.exists(path):
+        return
+    try:
+        blob = json.load(open(path, "r", encoding="utf-8"))
+    except Exception as e:
+        log("settings.json read err", repr(e)[:120])
+        return
+    c = sqlite3.connect(DB, timeout=30)
+    try:
+        bot_settings.ensure_schema(c)
+        n = 0
+        for name, payload in (blob.get("bots") or {}).items():
+            try:
+                bot_settings.save_one(c, name, payload)
+                n += 1
+            except Exception as e:
+                log("settings restore skip", name, repr(e)[:120])
+        log("settings.json restored", n, "bots")
+    finally:
+        c.close()
+
+
 def restore():
     if os.environ.get("SKIP_RESTORE") == "1":  # local testing only
         with lock:
@@ -310,12 +352,14 @@ def restore():
             c = sqlite3.connect(DB)
             n = c.execute("select count(*), coalesce(sum(settled),0) from trades").fetchone()
             c.close()
-            for name, dst in (("trades.csv", CSV), ("price_hist.json", HIST)):
+            for name, dst in (("trades.csv", CSV), ("price_hist.json", HIST),
+                              ("settings.json", os.path.join(APP, "settings.json"))):
                 try:
                     q = hf_hub_download(STATE_REPO, name, repo_type="dataset", token=HF_TOKEN, local_dir=tmp, force_download=True)
                     shutil.copyfile(q, dst)
                 except Exception:
                     pass
+            _restore_settings_file(os.path.join(APP, "settings.json"))
             info = {"ok": True, "trades": n[0], "settled": n[1], "bytes": len(raw), "at": time.strftime("%F %T")}
             with lock:
                 state["restore"] = info
@@ -361,6 +405,10 @@ def upload_snapshot(reason):
     if os.path.exists(tmpdb):
         os.remove(tmpdb)
     src = sqlite3.connect(DB, timeout=30)
+    try:
+        src.execute("PRAGMA wal_checkpoint(FULL)")
+    except Exception:
+        pass
     dst = sqlite3.connect(tmpdb)
     with dst:
         src.backup(dst)
@@ -374,6 +422,12 @@ def upload_snapshot(reason):
     for name, p in (("trades.csv", CSV), ("price_hist.json", HIST)):
         if os.path.exists(p):
             ops.append(CommitOperationAdd(name, open(p, "rb").read()))
+    try:
+        settings_bytes = json.dumps(_settings_payload(), ensure_ascii=False, indent=2).encode()
+        ops.append(CommitOperationAdd("settings.json", settings_bytes))
+        open(os.path.join(APP, "settings.json"), "wb").write(settings_bytes)
+    except Exception as e:
+        log("settings.json snapshot skip", repr(e)[:120])
     ops.append(CommitOperationAdd("meta.json", json.dumps({"sig": sig, "at": time.strftime("%F %T %Z"),
                                                            "reason": reason, "space": SPACE_HOST}).encode()))
     api().create_commit(STATE_REPO, ops, repo_type="dataset", commit_message=f"snapshot {reason} {sig}")
@@ -395,17 +449,20 @@ def sync_loop():
             changed = sig != last_sig
             settled_changed = last_sig is None or sig[1] != last_sig[1] or sig[0] != last_sig[0]
             want = os.path.join(APP, ".want_sync")
-            force = os.path.exists(want)
+            want_mtime = os.path.getmtime(want) if os.path.exists(want) else 0
+            force = want_mtime > 0
             if changed and (settled_changed and time.time() - last_up > 45 or time.time() - last_up > 300) or (force and time.time() - last_up > 8):
+                t0 = time.time()
                 up = upload_snapshot("settle" if settled_changed else ("settings" if force else "periodic"))
                 last_sig, last_up = up, time.time()
                 with lock:
                     state["sync"].update(last_ok=time.strftime("%F %T"), last_sig=up, uploads=state["sync"]["uploads"] + 1, last_err=None)
-                if force:
-                    try:
+                try:
+                    # Keep the flag if a newer settings write landed while we were uploading.
+                    if os.path.exists(want) and os.path.getmtime(want) <= t0 + 0.01:
                         os.remove(want)
-                    except OSError:
-                        pass
+                except OSError:
+                    pass
                 log("state synced", up)
             if time.time() - (state["sync"].get("_squash_t") or T0) > 86400:
                 api().super_squash_history(STATE_REPO, repo_type="dataset", commit_message="squash")
