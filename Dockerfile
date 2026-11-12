@@ -7,6 +7,8 @@ COPY requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 COPY --chown=user:user app/ /app/
 COPY --chown=user:user supervisor.py /app/supervisor.py
+# WORKDIR /app is created as root; the bot must be able to write trades.db, status, logs.
+RUN chown user:user /app
 USER user
 ENV HOME=/home/user
 EXPOSE 10000
