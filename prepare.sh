@@ -5,7 +5,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 SRC=/workspace/polybot
 rm -rf app && mkdir -p app/web
-cp "$SRC/polybot.py" "$SRC/dashboard_data.py" "$SRC/web_push.py" app/
+cp "$SRC/polybot.py" "$SRC/dashboard_data.py" "$SRC/web_push.py" "$SRC/latency_hunter.py" app/
 cp "$SRC/web/server.py" "$SRC/web/index.html" app/web/
 [ -f "$SRC/web/classic.html" ] && cp "$SRC/web/classic.html" app/web/
 [ -d "$SRC/web/fonts" ] && cp -r "$SRC/web/fonts" app/web/
@@ -50,6 +50,6 @@ s = s.replace(old, "            fails = 0\n            oks += 1\n            try
 open(p, "w").write(s)
 PY
 find app -name __pycache__ -prune -exec rm -rf {} +
-python3 -m py_compile app/polybot.py app/web/server.py app/web_push.py app/dashboard_data.py supervisor.py
+python3 -m py_compile app/polybot.py app/web/server.py app/web_push.py app/dashboard_data.py app/latency_hunter.py supervisor.py
 echo "app/ prepared from $SRC"
 find app -name __pycache__ -prune -exec rm -rf {} +

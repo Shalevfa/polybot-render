@@ -6,6 +6,7 @@ against the live CLOB order book.
 import json, math, os, signal, sqlite3, threading, time, traceback, csv
 from datetime import datetime, timezone
 import requests, websocket
+from latency_hunter import LatencyHunter
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -867,7 +868,93 @@ class MomentumLate(Strategy):
         self._entry_kind = ("cross " if cross else "") + feat
         return (side, prob, edge, a), None
 
-STRATS = [LateModel(), LateModelRaw(), EarlyValue(), NaiveMomentum(), EveryRound(), MomentumLate()]
+
+class LatencyHunterStrategy(Strategy):
+    """Latency hunter (PAPER ONLY). Measures 15s/30s/60s BTC momentum, estimates P(up) from
+    recent log-return volatility, and buys the side whose executable ask is at least 6c below
+    that probability after taker fees and expected book slippage. Own $100 demo bankroll.
+    At most one entry per window. Does not place real orders."""
+    name = "latency_hunter"
+    min_edge = 0.06
+    kelly = 0.50
+    cash_frac_cap = 0.08
+    min_stake = 3.0
+    TYPICAL_STAKE = 8.0  # dollars used only to estimate walk-the-book slippage
+
+    def __init__(self):
+        super().__init__()
+        self.hunter = LatencyHunter()
+        self.last_signal = None
+        self._last_log_key = None
+
+    def on_price(self, price, timestamp):
+        self.hunter.update_price(price, timestamp=timestamp)
+
+    def seed(self, series):
+        for ts, px in series:
+            self.hunter.update_price(px, timestamp=ts)
+
+    def on_fill(self, timestamp):
+        self.hunter.mark_trade(timestamp=timestamp)
+
+    def active(self, el, left):
+        # After ~65s of BTC history the engine can fire; it refuses the last 20s itself.
+        return left >= 20
+
+    @staticmethod
+    def _best(books, side, leg):
+        levels = books.get(side, ([], [], None))[leg]
+        return levels[0][0] if levels else None
+
+    def _estimated_cost(self, books):
+        """Fee model per share at the best ask, plus expected slippage from walking the ask book."""
+        costs = []
+        for side in ("Up", "Down"):
+            asks = books.get(side, ([], [], None))[0]
+            if not asks:
+                continue
+            best = asks[0][0]
+            if not (0 < best < 1):
+                continue
+            fee_ps = FEE_RATE * best * (1.0 - best)
+            fill = simulate_buy(asks, self.TYPICAL_STAKE, min(0.97, best + 0.03), min_shares=1.0)
+            slip = (fill["avg"] - best) if fill else 0.01
+            costs.append(fee_ps + max(0.0, slip))
+        return max(costs) if costs else 0.0
+
+    def side_choice(self, m, mp, books):
+        up_bid = self._best(books, "Up", 1)
+        up_ask = self._best(books, "Up", 0)
+        down_bid = self._best(books, "Down", 1)
+        down_ask = self._best(books, "Down", 0)
+        cost = self._estimated_cost(books)
+        sig = self.hunter.evaluate(
+            market_open_price=m.open_px,
+            seconds_remaining=m.end - time.time(),
+            up_bid=up_bid, up_ask=up_ask,
+            down_bid=down_bid, down_ask=down_ask,
+            estimated_cost=cost,
+        )
+        self.last_signal = sig
+        key = (sig.action, sig.reason)
+        if key != self._last_log_key:
+            self._last_log_key = key
+            d = sig.diagnostics or {}
+            log(f"HUNTER {sig.action} {sig.reason} net={sig.net_edge:+.3f} p={sig.confidence:.3f} "
+                f"cost={d.get('estimated_cost')} left={d.get('seconds_remaining')} "
+                f"spot={d.get('btc_price')} open={d.get('market_open_price')}")
+        # Include ACTION in the skip/wait detail so the existing site state_he can show it.
+        if sig.action == "WAIT":
+            return None, f"{sig.action}: {sig.reason} net={sig.net_edge:+.3f} p={sig.confidence:.3f}"
+        side = "Up" if sig.action == "BUY_UP" else "Down"
+        asks = books.get(side, ([], [], None))[0]
+        if not asks:
+            return None, f"{sig.action}: no asks after signal"
+        a = asks[0][0]
+        return (side, sig.confidence, sig.net_edge, a), None
+
+
+STRATS = [LateModel(), LateModelRaw(), EarlyValue(), NaiveMomentum(), EveryRound(), MomentumLate(), LatencyHunterStrategy()]
 PRIMARY = "late_model"
 
 # ---------------------------------------------------------------- bot
@@ -969,7 +1056,7 @@ class Bot:
                 self.dec(m, s, "skip", why)
             return
         side, prob, edge, a = ch
-        if s.name != "every_round":
+        if s.name not in ("every_round", "latency_hunter"):
             g = self.guard(m, s, mp, books, left, side, prob, a)
             if g:
                 self.count_skip(m, s, g[0]); self.dec(m, s, "skip", f"[{g[0]}] {g[1]}"); return
@@ -1020,6 +1107,9 @@ class Bot:
                 fill["shares"], round(fill["avg"], 4), fill["cost"], fill["fee"], round(prob, 4), round(edge, 4), mp["spot"], m.open_px, left))
             self.c.commit(); write_csv(self.c)
         s.done.add(m.slug)
+        on_fill = getattr(s, "on_fill", None)
+        if callable(on_fill):
+            on_fill(now)
         fb = " fallback=1" if s.name == "every_round" and left < 20 else ""
         kind = f" {getattr(s, '_entry_kind', '')}" if s.name in ("late_add", "momentum_late") else ""
         if s.name == "momentum_late":
@@ -1079,7 +1169,7 @@ class Bot:
                     pre = ("book_contradicts_spot", f"spot-open {mp['spot'] - m.open_px:+.2f} but book P(up) {mm:.2f} with {left:.0f}s left")
         for s in act:
             try:
-                pre_s = pre if s.name not in ("every_round", "late_add") else self.every_round_pre()
+                pre_s = pre if s.name not in ("every_round", "late_add", "latency_hunter") else self.every_round_pre()
                 self.decide(m, s, mp, books, el, left, pre_s)
             except Exception: log("decide err", traceback.format_exc())
 
@@ -1168,9 +1258,16 @@ class Bot:
                     coalesce(sum(case when settled=1 then pnl end),0), coalesce(sum(fee),0), coalesce(sum(case when settled=0 then cost+fee end),0),
                     coalesce(sum(cost+fee),0) from trades where strategy=?""", (s.name,)).fetchone()
                 n, ns, w, pnl, fees, openc, vol = r; ns = ns or 0
-                st["strategies"][s.name] = dict(doc=(s.__doc__ or '').strip(), trades=n, settled=ns, wins=w or 0, win_rate=round(w / ns, 3) if ns else None,
+                rec = dict(doc=(s.__doc__ or '').strip(), trades=n, settled=ns, wins=w or 0, win_rate=round(w / ns, 3) if ns else None,
                     realized_pnl=round(pnl, 2), fees_paid=round(fees, 3), open_exposure=round(openc, 2), turnover=round(vol, 2),
                     cash=round(self.bankroll(s.name), 2), equity_if_open_at_cost=round(START_BANK + pnl, 2), roi_on_turnover=round(pnl / vol, 3) if vol else None)
+                sig = getattr(s, "last_signal", None)
+                if sig is not None:
+                    rec["decision"] = sig.action
+                    rec["decision_reason"] = sig.reason
+                    rec["decision_net_edge"] = round(float(sig.net_edge), 4)
+                    rec["decision_confidence"] = round(float(sig.confidence), 4)
+                st["strategies"][s.name] = rec
             p = st["strategies"][PRIMARY]
             st.update(bankroll=p["equity_if_open_at_cost"], pnl=p["realized_pnl"], trades=p["trades"], win_rate=p["win_rate"])
             wr = self.c.execute("select count(*), sum(check_ok) from windows where official is not null").fetchone()
@@ -1213,6 +1310,50 @@ class Bot:
                 log("status loop err", traceback.format_exc())
             self._stop.wait(3)
 
+    def _seed_hunter_history(self):
+        """Backfill ~120s of 1s BTC ticks so LatencyHunter is warm after a restart."""
+        now = int(time.time())
+        name, t, mid = self.feed.best_exchg()
+        pts = []
+        if name:
+            xs = self.feed.ex_series(name, now - 120, now)
+            start_ts = now - 120
+            if xs and sum(1 for v in xs if v is not None) >= 65:
+                pts = [(float(start_ts + i), float(px)) for i, px in enumerate(xs) if px]
+        if len(pts) < 65:
+            k, _ = self.feed.latest()
+            if k is not None:
+                cl = self.feed.series(k - 120, k)
+                start_ts = k - len(cl) + 1 if cl else k
+                pts = [(float(start_ts + i), float(px)) for i, px in enumerate(cl) if px]
+        if len(pts) < 65:
+            return False
+        for s in STRATS:
+            seed = getattr(s, "seed", None)
+            if callable(seed):
+                seed(pts)
+        log(f"hunter seeded {len(pts)} ticks from {pts[0][0]:.0f} to {pts[-1][0]:.0f}")
+        return True
+
+    def _feed_hunter_prices(self):
+        if not getattr(self, "_hunter_seeded", False):
+            self._hunter_seeded = bool(self._seed_hunter_history())
+        nc, src = self.feed.nowcast()
+        if nc is None:
+            return
+        name, t, mid = self.feed.best_exchg()
+        k, cl = self.feed.latest()
+        if src and src != "chainlink" and t:
+            ts = t
+        elif k is not None:
+            ts = float(k)
+        else:
+            ts = time.time()
+        for s in STRATS:
+            fn = getattr(s, "on_price", None)
+            if callable(fn):
+                fn(nc, ts)
+
     def run(self):
         log("polybot starting (PAPER MODE)")
         self._stop = threading.Event()
@@ -1232,6 +1373,7 @@ class Bot:
                 with self.mkt_lock:
                     for st in list(self.mkts):
                         if st + WIN < now - 5: del self.mkts[st]
+                self._feed_hunter_prices()
                 self.tick_market(self.mkts[cur])
                 if now - last_lag > 120: self.feed.estimate_lag(); last_lag = now
             except Exception:

@@ -41,6 +41,7 @@ STRATEGY_ORDER = [
     "naive_momentum",
     "every_round",
     "momentum_late",
+    "latency_hunter",
 ]
 GATE_REASON_HE = {
     "ok": "תקינה",

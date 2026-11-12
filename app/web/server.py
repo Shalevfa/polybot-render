@@ -48,6 +48,7 @@ STRATEGY_ORDER = [
     "naive_momentum",
     "every_round",
     "momentum_late",
+    "latency_hunter",
 ]
 
 # left_lo/hi = seconds remaining; el_lo/hi = seconds elapsed
@@ -59,6 +60,7 @@ ACTIVE = {
     "every_round": {"left_lo": 5, "left_hi": 150},
     "late_add": {"left_lo": 2, "left_hi": 10},
     "momentum_late": {"left_lo": 10, "left_hi": 90},
+    "latency_hunter": {"left_lo": 20, "left_hi": 300},
 }
 
 DOC_HE = {
@@ -69,6 +71,7 @@ DOC_HE = {
     "every_round": "נכנסת לכל סיבוב, בערך שתי דקות וחצי לפני הסוף, בצד שהמודל מעדיף.",
     "late_add": "ב-10 השניות האחרונות מוסיפה לעסקה מרוויחה, אם המחיר עדיין עד 95 סנט.",
     "momentum_late": "ב-90 השניות האחרונות מסתכלת על התנועה של 30–60 השניות הקודמות, ונכנסת רק בכיוון המומנטום כשיש פער של 4 סנט לפחות.",
+    "latency_hunter": "צייד ההשהיה. מודד מומנטום של 15/30/60 שניות, מעריך את הסיכוי ל-Up, ונכנס רק כשיש יתרון נטו של 6 סנט אחרי עמלה והחלקה.",
 }
 
 SKIP_HE = {
