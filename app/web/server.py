@@ -55,6 +55,7 @@ STRATEGY_ORDER = [
     "every_round",
     "momentum_late",
     "latency_hunter",
+    "genetic",
     "manual",
 ]
 
@@ -68,6 +69,7 @@ ACTIVE = {
     "late_add": {"left_lo": 2, "left_hi": 10},
     "momentum_late": {"left_lo": 10, "left_hi": 90},
     "latency_hunter": {"left_lo": 20, "left_hi": 300},
+    "genetic": {"left_lo": 5, "left_hi": 75},
     "manual": {},
 }
 
@@ -80,6 +82,7 @@ DOC_HE = {
     "late_add": "ב-10 השניות האחרונות מוסיפה לעסקה מרוויחה, אם המחיר עדיין עד 95 סנט.",
     "momentum_late": "ב-90 השניות האחרונות מסתכלת על התנועה של 30–60 השניות הקודמות, ונכנסת רק בכיוון המומנטום כשיש פער של 4 סנט לפחות.",
     "latency_hunter": "צייד ההשהיה. מודד מומנטום של 15/30/60 שניות, מעריך את הסיכוי ל-Up, ונכנס רק כשיש יתרון נטו של 6 סנט אחרי עמלה והחלקה.",
+    "genetic": "בוט גנטי. מחזיק אוכלוסייה קטנה של פרמטרים, בודק כל גרסה בצל, והאלופה סוחרת בקופה דמו של 100 דולר. מתפתח כל כמה סיבובים.",
     "manual": "בוט ידני. לא נכנס לבד — קונים Up או Down מעמוד הניהול שלו, בכסף דמו בלבד.",
 }
 
@@ -735,6 +738,9 @@ def build_payload() -> dict:
                     }
                     for o in opens
                 ],
+                "decision": s.get("decision"),
+                "decision_reason": s.get("decision_reason"),
+                "genetic": s.get("genetic"),
             })
 
         trades_by_strategy = {n: [] for n in list_strategies(status, con)}

@@ -43,3 +43,5 @@ HF_TOKEN
 *.bak_*
 *.tmp
 .DS_Store
+genetic_state.json
+app/genetic_state.json

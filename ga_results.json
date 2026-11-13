@@ -1,0 +1,2426 @@
+{
+  "paper_only": true,
+  "applied_to_live": false,
+  "note": "Top genomes are reported only. They were NOT written to live bot settings.",
+  "generated_at": "2026-11-13 12:59:56 (Asia/Jerusalem)",
+  "seed": 42,
+  "pop": 28,
+  "gens": 22,
+  "data": {
+    "windows": 285,
+    "resolved": 285,
+    "snaps": 1415,
+    "snaps_per_window": 4.96,
+    "snaps_with_depth": 0,
+    "snaps_with_bids": 0,
+    "snaps_with_price_path": 0,
+    "start_min": 1794354900,
+    "start_max": 1794459600,
+    "book_history_thin": true,
+    "note": "Historical snapshots store best ask only (~5 times per 5-minute window), with no bid or depth and no 1-second price path. Replay fills at the recorded ask with a 50-share single level (fees exact, slippage beyond the touch = 0). momentum_late and latency_hunter cannot be evolved fairly on this history. Richer per-round snapshots (top-of-book levels, bids, short price path) are now recorded going forward."
+  },
+  "splits": {
+    "70/30": {
+      "train_windows": 199,
+      "test_windows": 86,
+      "train_start": 1794354900,
+      "train_end": 1794427800,
+      "test_start": 1794428100,
+      "test_end": 1794459600
+    },
+    "expanding-50/75": {
+      "train_windows": 142,
+      "test_windows": 71
+    },
+    "expanding-75/100": {
+      "train_windows": 213,
+      "test_windows": 72
+    }
+  },
+  "strategies": {
+    "late_model": {
+      "strategy": "late_model",
+      "default": {
+        "genome": {
+          "min_edge": 0.04,
+          "max_disagree": 0.3,
+          "w": 0.6,
+          "kelly": 0.5,
+          "cash_frac_cap": 0.12,
+          "min_stake": 3.0,
+          "cap": 10.0,
+          "left_lo": 5.0,
+          "left_hi": 75.0
+        },
+        "train": {
+          "ok": true,
+          "reason": null,
+          "pnl": -31.9721,
+          "trades": 22,
+          "wins": 7,
+          "win_rate": 0.318,
+          "max_dd": 60.6444,
+          "bank": 68.0279
+        },
+        "test": {
+          "ok": true,
+          "reason": null,
+          "pnl": 19.3832,
+          "trades": 7,
+          "wins": 5,
+          "win_rate": 0.714,
+          "max_dd": 12.3231,
+          "bank": 119.3832
+        },
+        "train_fitness": -53.1976
+      },
+      "best": {
+        "train_fitness": 190.9186,
+        "genome": {
+          "min_edge": 0.0267,
+          "max_disagree": 0.2222,
+          "w": 0.0549,
+          "kelly": 0.9711,
+          "cash_frac_cap": 0.01,
+          "min_stake": 33.017,
+          "cap": 2.579,
+          "left_lo": 59.4088,
+          "left_hi": 150.1892
+        },
+        "train": {
+          "ok": true,
+          "reason": null,
+          "pnl": 226.2579,
+          "trades": 59,
+          "wins": 24,
+          "win_rate": 0.407,
+          "max_dd": 100.9695,
+          "bank": 326.2579
+        },
+        "test": {
+          "ok": true,
+          "reason": null,
+          "pnl": 89.5786,
+          "trades": 39,
+          "wins": 17,
+          "win_rate": 0.436,
+          "max_dd": 143.2255,
+          "bank": 189.5786
+        }
+      },
+      "top": [
+        {
+          "train_fitness": 190.9186,
+          "genome": {
+            "min_edge": 0.0267,
+            "max_disagree": 0.2222,
+            "w": 0.0549,
+            "kelly": 0.9711,
+            "cash_frac_cap": 0.01,
+            "min_stake": 33.017,
+            "cap": 2.579,
+            "left_lo": 59.4088,
+            "left_hi": 150.1892
+          },
+          "train": {
+            "ok": true,
+            "reason": null,
+            "pnl": 226.2579,
+            "trades": 59,
+            "wins": 24,
+            "win_rate": 0.407,
+            "max_dd": 100.9695,
+            "bank": 326.2579
+          },
+          "test": {
+            "ok": true,
+            "reason": null,
+            "pnl": 89.5786,
+            "trades": 39,
+            "wins": 17,
+            "win_rate": 0.436,
+            "max_dd": 143.2255,
+            "bank": 189.5786
+          }
+        },
+        {
+          "train_fitness": 190.8295,
+          "genome": {
+            "min_edge": 0.0267,
+            "max_disagree": 0.2566,
+            "w": 0.2012,
+            "kelly": 1.0,
+            "cash_frac_cap": 0.01,
+            "min_stake": 33.8064,
+            "cap": 2.579,
+            "left_lo": 59.4088,
+            "left_hi": 150.1892
+          },
+          "train": {
+            "ok": true,
+            "reason": null,
+            "pnl": 226.4006,
+            "trades": 59,
+            "wins": 24,
+            "win_rate": 0.407,
+            "max_dd": 101.6317,
+            "bank": 326.4006
+          },
+          "test": {
+            "ok": true,
+            "reason": null,
+            "pnl": 89.6091,
+            "trades": 39,
+            "wins": 17,
+            "win_rate": 0.436,
+            "max_dd": 144.0199,
+            "bank": 189.6091
+          }
+        },
+        {
+          "train_fitness": 190.8295,
+          "genome": {
+            "min_edge": 0.0267,
+            "max_disagree": 0.3292,
+            "w": 0.2012,
+            "kelly": 1.0,
+            "cash_frac_cap": 0.01,
+            "min_stake": 33.8064,
+            "cap": 2.579,
+            "left_lo": 59.4088,
+            "left_hi": 150.4914
+          },
+          "train": {
+            "ok": true,
+            "reason": null,
+            "pnl": 226.4006,
+            "trades": 59,
+            "wins": 24,
+            "win_rate": 0.407,
+            "max_dd": 101.6317,
+            "bank": 326.4006
+          },
+          "test": {
+            "ok": true,
+            "reason": null,
+            "pnl": 89.6091,
+            "trades": 39,
+            "wins": 17,
+            "win_rate": 0.436,
+            "max_dd": 144.0199,
+            "bank": 189.6091
+          }
+        },
+        {
+          "train_fitness": 190.8295,
+          "genome": {
+            "min_edge": 0.0267,
+            "max_disagree": 0.2007,
+            "w": 0.6943,
+            "kelly": 0.3307,
+            "cash_frac_cap": 0.0297,
+            "min_stake": 33.8064,
+            "cap": 2.579,
+            "left_lo": 59.4088,
+            "left_hi": 150.1892
+          },
+          "train": {
+            "ok": true,
+            "reason": null,
+            "pnl": 226.4006,
+            "trades": 59,
+            "wins": 24,
+            "win_rate": 0.407,
+            "max_dd": 101.6317,
+            "bank": 326.4006
+          },
+          "test": {
+            "ok": true,
+            "reason": null,
+            "pnl": 89.6091,
+            "trades": 39,
+            "wins": 17,
+            "win_rate": 0.436,
+            "max_dd": 144.0199,
+            "bank": 189.6091
+          }
+        },
+        {
+          "train_fitness": 186.6551,
+          "genome": {
+            "min_edge": 0.0267,
+            "max_disagree": 0.2359,
+            "w": 0.3268,
+            "kelly": 1.0,
+            "cash_frac_cap": 0.01,
+            "min_stake": 50.0,
+            "cap": 2.579,
+            "left_lo": 59.3497,
+            "left_hi": 150.1892
+          },
+          "train": {
+            "ok": true,
+            "reason": null,
+            "pnl": 223.7295,
+            "trades": 59,
+            "wins": 24,
+            "win_rate": 0.407,
+            "max_dd": 105.9268,
+            "bank": 323.7295
+          },
+          "test": {
+            "ok": true,
+            "reason": null,
+            "pnl": 82.8296,
+            "trades": 39,
+            "wins": 17,
+            "win_rate": 0.436,
+            "max_dd": 156.9449,
+            "bank": 182.8296
+          }
+        }
+      ],
+      "delta_train_pnl": 258.23,
+      "delta_test_pnl": 70.1954,
+      "history": [
+        {
+          "gen": 0,
+          "best_fit": 74.208965,
+          "best_pnl": 109.3112,
+          "best_trades": 74
+        },
+        {
+          "gen": 1,
+          "best_fit": 124.30333000000002,
+          "best_pnl": 152.4105,
+          "best_trades": 64
+        },
+        {
+          "gen": 2,
+          "best_fit": 124.30333000000002,
+          "best_pnl": 152.4105,
+          "best_trades": 64
+        },
+        {
+          "gen": 3,
+          "best_fit": 176.36493000000002,
+          "best_pnl": 204.4721,
+          "best_trades": 64
+        },
+        {
+          "gen": 4,
+          "best_fit": 176.36493000000002,
+          "best_pnl": 204.4721,
+          "best_trades": 64
+        },
+        {
+          "gen": 5,
+          "best_fit": 176.36493000000002,
+          "best_pnl": 204.4721,
+          "best_trades": 64
+        },
+        {
+          "gen": 6,
+          "best_fit": 176.36493000000002,
+          "best_pnl": 204.4721,
+          "best_trades": 64
+        },
+        {
+          "gen": 7,
+          "best_fit": 176.36493000000002,
+          "best_pnl": 204.4721,
+          "best_trades": 64
+        },
+        {
+          "gen": 8,
+          "best_fit": 178.87584,
+          "best_pnl": 206.5327,
+          "best_trades": 64
+        },
+        {
+          "gen": 9,
+          "best_fit": 178.87584,
+          "best_pnl": 206.5327,
+          "best_trades": 64
+        },
+        {
+          "gen": 10,
+          "best_fit": 180.10799,
+          "best_pnl": 223.2506,
+          "best_trades": 56
+        },
+        {
+          "gen": 11,
+          "best_fit": 180.10799,
+          "best_pnl": 223.2506,
+          "best_trades": 56
+        },
+        {
+          "gen": 12,
+          "best_fit": 181.53293,
+          "best_pnl": 209.6401,
+          "best_trades": 64
+        },
+        {
+          "gen": 13,
+          "best_fit": 181.53293,
+          "best_pnl": 209.6401,
+          "best_trades": 64
+        },
+        {
+          "gen": 14,
+          "best_fit": 181.53293,
+          "best_pnl": 209.6401,
+          "best_trades": 64
+        },
+        {
+          "gen": 15,
+          "best_fit": 186.65512,
+          "best_pnl": 223.7295,
+          "best_trades": 59
+        },
+        {
+          "gen": 16,
+          "best_fit": 190.829505,
+          "best_pnl": 226.4006,
+          "best_trades": 59
+        },
+        {
+          "gen": 17,
+          "best_fit": 190.829505,
+          "best_pnl": 226.4006,
+          "best_trades": 59
+        },
+        {
+          "gen": 18,
+          "best_fit": 190.829505,
+          "best_pnl": 226.4006,
+          "best_trades": 59
+        },
+        {
+          "gen": 19,
+          "best_fit": 190.829505,
+          "best_pnl": 226.4006,
+          "best_trades": 59
+        },
+        {
+          "gen": 20,
+          "best_fit": 190.918575,
+          "best_pnl": 226.2579,
+          "best_trades": 59
+        },
+        {
+          "gen": 21,
+          "best_fit": 190.918575,
+          "best_pnl": 226.2579,
+          "best_trades": 59
+        }
+      ],
+      "min_trades_train": 12,
+      "min_trades_test": 7,
+      "pop": 28,
+      "gens": 22,
+      "other_folds": {
+        "expanding-50/75": {
+          "default": {
+            "train": {
+              "ok": true,
+              "reason": null,
+              "pnl": -38.8751,
+              "trades": 16,
+              "wins": 5,
+              "win_rate": 0.312,
+              "max_dd": 60.6444,
+              "bank": 61.1249
+            },
+            "test": {
+              "ok": true,
+              "reason": null,
+              "pnl": -3.9015,
+              "trades": 9,
+              "wins": 4,
+              "win_rate": 0.444,
+              "max_dd": 45.6686,
+              "bank": 96.0985
+            }
+          },
+          "best": {
+            "train": {
+              "ok": true,
+              "reason": null,
+              "pnl": 278.1192,
+              "trades": 38,
+              "wins": 18,
+              "win_rate": 0.474,
+              "max_dd": 72.1972,
+              "bank": 378.1192
+            },
+            "test": {
+              "ok": true,
+              "reason": null,
+              "pnl": 78.1857,
+              "trades": 30,
+              "wins": 12,
+              "win_rate": 0.4,
+              "max_dd": 86.5711,
+              "bank": 178.1857
+            }
+          }
+        },
+        "expanding-75/100": {
+          "default": {
+            "train": {
+              "ok": true,
+              "reason": null,
+              "pnl": -30.9678,
+              "trades": 25,
+              "wins": 9,
+              "win_rate": 0.36,
+              "max_dd": 60.6444,
+              "bank": 69.0322
+            },
+            "test": {
+              "ok": true,
+              "reason": null,
+              "pnl": 16.2522,
+              "trades": 4,
+              "wins": 3,
+              "win_rate": 0.75,
+              "max_dd": 11.9981,
+              "bank": 116.2522
+            }
+          },
+          "best": {
+            "train": {
+              "ok": true,
+              "reason": null,
+              "pnl": 356.3049,
+              "trades": 68,
+              "wins": 30,
+              "win_rate": 0.441,
+              "max_dd": 107.0058,
+              "bank": 456.3049
+            },
+            "test": {
+              "ok": true,
+              "reason": null,
+              "pnl": -99.9981,
+              "trades": 7,
+              "wins": 0,
+              "win_rate": 0.0,
+              "max_dd": 99.9981,
+              "bank": 0.0019
+            }
+          }
+        }
+      },
+      "seconds": 0.6
+    },
+    "late_model_raw": {
+      "strategy": "late_model_raw",
+      "default": {
+        "genome": {
+          "min_edge": 0.05,
+          "max_disagree": 9.0,
+          "w": 1.0,
+          "kelly": 0.5,
+          "cash_frac_cap": 0.12,
+          "min_stake": 3.0,
+          "cap": 10.0,
+          "left_lo": 5.0,
+          "left_hi": 75.0
+        },
+        "train": {
+          "ok": true,
+          "reason": null,
+          "pnl": -31.9721,
+          "trades": 22,
+          "wins": 7,
+          "win_rate": 0.318,
+          "max_dd": 60.6444,
+          "bank": 68.0279
+        },
+        "test": {
+          "ok": true,
+          "reason": null,
+          "pnl": 19.3832,
+          "trades": 7,
+          "wins": 5,
+          "win_rate": 0.714,
+          "max_dd": 12.3231,
+          "bank": 119.3832
+        },
+        "train_fitness": -53.1976
+      },
+      "best": {
+        "train_fitness": 173.1218,
+        "genome": {
+          "min_edge": 0.1173,
+          "max_disagree": 10.0,
+          "w": 1.0,
+          "kelly": 0.643,
+          "cash_frac_cap": 0.246,
+          "min_stake": 33.1784,
+          "cap": 1.0,
+          "left_lo": 73.1218,
+          "left_hi": 97.5789
+        },
+        "train": {
+          "ok": true,
+          "reason": null,
+          "pnl": 178.6277,
+          "trades": 15,
+          "wins": 9,
+          "win_rate": 0.6,
+          "max_dd": 15.7311,
+          "bank": 278.6277
+        },
+        "test": {
+          "ok": true,
+          "reason": null,
+          "pnl": -44.5202,
+          "trades": 13,
+          "wins": 3,
+          "win_rate": 0.231,
+          "max_dd": 100.9943,
+          "bank": 55.4798
+        }
+      },
+      "top": [
+        {
+          "train_fitness": 173.1218,
+          "genome": {
+            "min_edge": 0.1173,
+            "max_disagree": 10.0,
+            "w": 1.0,
+            "kelly": 0.643,
+            "cash_frac_cap": 0.246,
+            "min_stake": 33.1784,
+            "cap": 1.0,
+            "left_lo": 73.1218,
+            "left_hi": 97.5789
+          },
+          "train": {
+            "ok": true,
+            "reason": null,
+            "pnl": 178.6277,
+            "trades": 15,
+            "wins": 9,
+            "win_rate": 0.6,
+            "max_dd": 15.7311,
+            "bank": 278.6277
+          },
+          "test": {
+            "ok": true,
+            "reason": null,
+            "pnl": -44.5202,
+            "trades": 13,
+            "wins": 3,
+            "win_rate": 0.231,
+            "max_dd": 100.9943,
+            "bank": 55.4798
+          }
+        },
+        {
+          "train_fitness": 173.1218,
+          "genome": {
+            "min_edge": 0.1173,
+            "max_disagree": 7.8134,
+            "w": 0.8041,
+            "kelly": 0.643,
+            "cash_frac_cap": 0.5696,
+            "min_stake": 34.5684,
+            "cap": 11.9575,
+            "left_lo": 73.1218,
+            "left_hi": 97.5789
+          },
+          "train": {
+            "ok": true,
+            "reason": null,
+            "pnl": 178.6277,
+            "trades": 15,
+            "wins": 9,
+            "win_rate": 0.6,
+            "max_dd": 15.7311,
+            "bank": 278.6277
+          },
+          "test": {
+            "ok": true,
+            "reason": null,
+            "pnl": -44.5202,
+            "trades": 13,
+            "wins": 3,
+            "win_rate": 0.231,
+            "max_dd": 100.9943,
+            "bank": 55.4798
+          }
+        },
+        {
+          "train_fitness": 173.1218,
+          "genome": {
+            "min_edge": 0.1173,
+            "max_disagree": 10.0,
+            "w": 1.0,
+            "kelly": 0.643,
+            "cash_frac_cap": 0.5696,
+            "min_stake": 27.7914,
+            "cap": 11.9092,
+            "left_lo": 73.1218,
+            "left_hi": 95.0203
+          },
+          "train": {
+            "ok": true,
+            "reason": null,
+            "pnl": 178.6277,
+            "trades": 15,
+            "wins": 9,
+            "win_rate": 0.6,
+            "max_dd": 15.7311,
+            "bank": 278.6277
+          },
+          "test": {
+            "ok": true,
+            "reason": null,
+            "pnl": -39.5009,
+            "trades": 13,
+            "wins": 3,
+            "win_rate": 0.231,
+            "max_dd": 95.9749,
+            "bank": 60.4991
+          }
+        },
+        {
+          "train_fitness": 173.1218,
+          "genome": {
+            "min_edge": 0.1173,
+            "max_disagree": 10.0,
+            "w": 1.0,
+            "kelly": 0.643,
+            "cash_frac_cap": 0.4372,
+            "min_stake": 23.777,
+            "cap": 2.2005,
+            "left_lo": 73.1218,
+            "left_hi": 97.5789
+          },
+          "train": {
+            "ok": true,
+            "reason": null,
+            "pnl": 178.6277,
+            "trades": 15,
+            "wins": 9,
+            "win_rate": 0.6,
+            "max_dd": 15.7311,
+            "bank": 278.6277
+          },
+          "test": {
+            "ok": true,
+            "reason": null,
+            "pnl": -35.4854,
+            "trades": 13,
+            "wins": 3,
+            "win_rate": 0.231,
+            "max_dd": 91.9594,
+            "bank": 64.5146
+          }
+        },
+        {
+          "train_fitness": 173.1218,
+          "genome": {
+            "min_edge": 0.1029,
+            "max_disagree": 7.8134,
+            "w": 1.0,
+            "kelly": 0.9109,
+            "cash_frac_cap": 0.5696,
+            "min_stake": 27.9194,
+            "cap": 16.2194,
+            "left_lo": 73.1218,
+            "left_hi": 97.5789
+          },
+          "train": {
+            "ok": true,
+            "reason": null,
+            "pnl": 178.6277,
+            "trades": 15,
+            "wins": 9,
+            "win_rate": 0.6,
+            "max_dd": 15.7311,
+            "bank": 278.6277
+          },
+          "test": {
+            "ok": true,
+            "reason": null,
+            "pnl": -60.398,
+            "trades": 15,
+            "wins": 4,
+            "win_rate": 0.267,
+            "max_dd": 109.3161,
+            "bank": 39.602
+          }
+        }
+      ],
+      "delta_train_pnl": 210.5998,
+      "delta_test_pnl": -63.9034,
+      "history": [
+        {
+          "gen": 0,
+          "best_fit": 95.520495,
+          "best_pnl": 122.577,
+          "best_trades": 38
+        },
+        {
+          "gen": 1,
+          "best_fit": 99.89296499999999,
+          "best_pnl": 122.5974,
+          "best_trades": 9
+        },
+        {
+          "gen": 2,
+          "best_fit": 117.661235,
+          "best_pnl": 154.9446,
+          "best_trades": 74
+        },
+        {
+          "gen": 3,
+          "best_fit": 117.661235,
+          "best_pnl": 154.9446,
+          "best_trades": 74
+        },
+        {
+          "gen": 4,
+          "best_fit": 145.469845,
+          "best_pnl": 196.2924,
+          "best_trades": 67
+        },
+        {
+          "gen": 5,
+          "best_fit": 173.121815,
+          "best_pnl": 178.6277,
+          "best_trades": 15
+        },
+        {
+          "gen": 6,
+          "best_fit": 173.121815,
+          "best_pnl": 178.6277,
+          "best_trades": 15
+        },
+        {
+          "gen": 7,
+          "best_fit": 173.121815,
+          "best_pnl": 178.6277,
+          "best_trades": 15
+        },
+        {
+          "gen": 8,
+          "best_fit": 173.121815,
+          "best_pnl": 178.6277,
+          "best_trades": 15
+        },
+        {
+          "gen": 9,
+          "best_fit": 173.121815,
+          "best_pnl": 178.6277,
+          "best_trades": 15
+        },
+        {
+          "gen": 10,
+          "best_fit": 173.121815,
+          "best_pnl": 178.6277,
+          "best_trades": 15
+        },
+        {
+          "gen": 11,
+          "best_fit": 173.121815,
+          "best_pnl": 178.6277,
+          "best_trades": 15
+        },
+        {
+          "gen": 12,
+          "best_fit": 173.121815,
+          "best_pnl": 178.6277,
+          "best_trades": 15
+        },
+        {
+          "gen": 13,
+          "best_fit": 173.121815,
+          "best_pnl": 178.6277,
+          "best_trades": 15
+        },
+        {
+          "gen": 14,
+          "best_fit": 173.121815,
+          "best_pnl": 178.6277,
+          "best_trades": 15
+        },
+        {
+          "gen": 15,
+          "best_fit": 173.121815,
+          "best_pnl": 178.6277,
+          "best_trades": 15
+        },
+        {
+          "gen": 16,
+          "best_fit": 173.121815,
+          "best_pnl": 178.6277,
+          "best_trades": 15
+        },
+        {
+          "gen": 17,
+          "best_fit": 173.121815,
+          "best_pnl": 178.6277,
+          "best_trades": 15
+        },
+        {
+          "gen": 18,
+          "best_fit": 173.121815,
+          "best_pnl": 178.6277,
+          "best_trades": 15
+        },
+        {
+          "gen": 19,
+          "best_fit": 173.121815,
+          "best_pnl": 178.6277,
+          "best_trades": 15
+        },
+        {
+          "gen": 20,
+          "best_fit": 173.121815,
+          "best_pnl": 178.6277,
+          "best_trades": 15
+        },
+        {
+          "gen": 21,
+          "best_fit": 173.121815,
+          "best_pnl": 178.6277,
+          "best_trades": 15
+        }
+      ],
+      "min_trades_train": 12,
+      "min_trades_test": 7,
+      "pop": 28,
+      "gens": 22,
+      "other_folds": {
+        "expanding-50/75": {
+          "default": {
+            "train": {
+              "ok": true,
+              "reason": null,
+              "pnl": -38.8751,
+              "trades": 16,
+              "wins": 5,
+              "win_rate": 0.312,
+              "max_dd": 60.6444,
+              "bank": 61.1249
+            },
+            "test": {
+              "ok": true,
+              "reason": null,
+              "pnl": -3.9015,
+              "trades": 9,
+              "wins": 4,
+              "win_rate": 0.444,
+              "max_dd": 45.6686,
+              "bank": 96.0985
+            }
+          },
+          "best": {
+            "train": {
+              "ok": true,
+              "reason": null,
+              "pnl": 145.7364,
+              "trades": 9,
+              "wins": 6,
+              "win_rate": 0.667,
+              "max_dd": 15.2206,
+              "bank": 245.7364
+            },
+            "test": {
+              "ok": true,
+              "reason": null,
+              "pnl": 27.9239,
+              "trades": 9,
+              "wins": 4,
+              "win_rate": 0.444,
+              "max_dd": 22.1438,
+              "bank": 127.9239
+            }
+          }
+        },
+        "expanding-75/100": {
+          "default": {
+            "train": {
+              "ok": true,
+              "reason": null,
+              "pnl": -30.9678,
+              "trades": 25,
+              "wins": 9,
+              "win_rate": 0.36,
+              "max_dd": 60.6444,
+              "bank": 69.0322
+            },
+            "test": {
+              "ok": true,
+              "reason": null,
+              "pnl": 16.2522,
+              "trades": 4,
+              "wins": 3,
+              "win_rate": 0.75,
+              "max_dd": 11.9981,
+              "bank": 116.2522
+            }
+          },
+          "best": {
+            "train": {
+              "ok": true,
+              "reason": null,
+              "pnl": 176.6313,
+              "trades": 18,
+              "wins": 10,
+              "win_rate": 0.556,
+              "max_dd": 22.1438,
+              "bank": 276.6313
+            },
+            "test": {
+              "ok": true,
+              "reason": null,
+              "pnl": -42.5239,
+              "trades": 10,
+              "wins": 2,
+              "win_rate": 0.2,
+              "max_dd": 78.8504,
+              "bank": 57.4761
+            }
+          }
+        }
+      },
+      "seconds": 0.5
+    },
+    "early_value": {
+      "strategy": "early_value",
+      "default": {
+        "genome": {
+          "min_edge": 0.06,
+          "kelly": 0.4,
+          "cap": 6.0,
+          "cash_frac_cap": 0.08,
+          "max_disagree": 0.25,
+          "w": 0.5,
+          "min_stake": 3.0,
+          "el_lo": 60.0,
+          "el_hi": 210.0
+        },
+        "train": {
+          "ok": true,
+          "reason": null,
+          "pnl": -63.5959,
+          "trades": 82,
+          "wins": 31,
+          "win_rate": 0.378,
+          "max_dd": 100.9904,
+          "bank": 36.4041
+        },
+        "test": {
+          "ok": true,
+          "reason": null,
+          "pnl": -47.5804,
+          "trades": 43,
+          "wins": 13,
+          "win_rate": 0.302,
+          "max_dd": 95.0277,
+          "bank": 52.4196
+        },
+        "train_fitness": -98.9425
+      },
+      "best": {
+        "train_fitness": 186.8373,
+        "genome": {
+          "min_edge": 0.0,
+          "kelly": 0.6475,
+          "cap": 36.852,
+          "cash_frac_cap": 0.01,
+          "max_disagree": 0.3384,
+          "w": 0.7275,
+          "min_stake": 32.6782,
+          "el_lo": 158.2503,
+          "el_hi": 223.6181
+        },
+        "train": {
+          "ok": true,
+          "reason": null,
+          "pnl": 227.1561,
+          "trades": 46,
+          "wins": 22,
+          "win_rate": 0.478,
+          "max_dd": 115.1965,
+          "bank": 327.1561
+        },
+        "test": {
+          "ok": true,
+          "reason": null,
+          "pnl": 112.6128,
+          "trades": 36,
+          "wins": 17,
+          "win_rate": 0.472,
+          "max_dd": 110.6417,
+          "bank": 212.6128
+        }
+      },
+      "top": [
+        {
+          "train_fitness": 186.8373,
+          "genome": {
+            "min_edge": 0.0,
+            "kelly": 0.6475,
+            "cap": 36.852,
+            "cash_frac_cap": 0.01,
+            "max_disagree": 0.3384,
+            "w": 0.7275,
+            "min_stake": 32.6782,
+            "el_lo": 158.2503,
+            "el_hi": 223.6181
+          },
+          "train": {
+            "ok": true,
+            "reason": null,
+            "pnl": 227.1561,
+            "trades": 46,
+            "wins": 22,
+            "win_rate": 0.478,
+            "max_dd": 115.1965,
+            "bank": 327.1561
+          },
+          "test": {
+            "ok": true,
+            "reason": null,
+            "pnl": 112.6128,
+            "trades": 36,
+            "wins": 17,
+            "win_rate": 0.472,
+            "max_dd": 110.6417,
+            "bank": 212.6128
+          }
+        },
+        {
+          "train_fitness": 186.8373,
+          "genome": {
+            "min_edge": 0.0061,
+            "kelly": 0.6475,
+            "cap": 36.852,
+            "cash_frac_cap": 0.01,
+            "max_disagree": 0.3384,
+            "w": 0.6723,
+            "min_stake": 32.6782,
+            "el_lo": 130.1431,
+            "el_hi": 223.6181
+          },
+          "train": {
+            "ok": true,
+            "reason": null,
+            "pnl": 227.1561,
+            "trades": 46,
+            "wins": 22,
+            "win_rate": 0.478,
+            "max_dd": 115.1965,
+            "bank": 327.1561
+          },
+          "test": {
+            "ok": true,
+            "reason": null,
+            "pnl": 112.6128,
+            "trades": 36,
+            "wins": 17,
+            "win_rate": 0.472,
+            "max_dd": 110.6417,
+            "bank": 212.6128
+          }
+        },
+        {
+          "train_fitness": 186.8373,
+          "genome": {
+            "min_edge": 0.0061,
+            "kelly": 0.3084,
+            "cap": 36.852,
+            "cash_frac_cap": 0.01,
+            "max_disagree": 0.3384,
+            "w": 0.8751,
+            "min_stake": 32.6782,
+            "el_lo": 158.2503,
+            "el_hi": 223.6181
+          },
+          "train": {
+            "ok": true,
+            "reason": null,
+            "pnl": 227.1561,
+            "trades": 46,
+            "wins": 22,
+            "win_rate": 0.478,
+            "max_dd": 115.1965,
+            "bank": 327.1561
+          },
+          "test": {
+            "ok": true,
+            "reason": null,
+            "pnl": 112.6128,
+            "trades": 36,
+            "wins": 17,
+            "win_rate": 0.472,
+            "max_dd": 110.6417,
+            "bank": 212.6128
+          }
+        },
+        {
+          "train_fitness": 186.8373,
+          "genome": {
+            "min_edge": 0.0,
+            "kelly": 0.6475,
+            "cap": 55.8798,
+            "cash_frac_cap": 0.01,
+            "max_disagree": 0.3384,
+            "w": 0.744,
+            "min_stake": 32.6782,
+            "el_lo": 152.7123,
+            "el_hi": 223.6181
+          },
+          "train": {
+            "ok": true,
+            "reason": null,
+            "pnl": 227.1561,
+            "trades": 46,
+            "wins": 22,
+            "win_rate": 0.478,
+            "max_dd": 115.1965,
+            "bank": 327.1561
+          },
+          "test": {
+            "ok": true,
+            "reason": null,
+            "pnl": 112.6128,
+            "trades": 36,
+            "wins": 17,
+            "win_rate": 0.472,
+            "max_dd": 110.6417,
+            "bank": 212.6128
+          }
+        },
+        {
+          "train_fitness": 186.8373,
+          "genome": {
+            "min_edge": 0.0061,
+            "kelly": 0.6475,
+            "cap": 36.852,
+            "cash_frac_cap": 0.01,
+            "max_disagree": 0.3384,
+            "w": 0.5722,
+            "min_stake": 32.6782,
+            "el_lo": 158.2503,
+            "el_hi": 223.6181
+          },
+          "train": {
+            "ok": true,
+            "reason": null,
+            "pnl": 227.1561,
+            "trades": 46,
+            "wins": 22,
+            "win_rate": 0.478,
+            "max_dd": 115.1965,
+            "bank": 327.1561
+          },
+          "test": {
+            "ok": true,
+            "reason": null,
+            "pnl": 112.6128,
+            "trades": 36,
+            "wins": 17,
+            "win_rate": 0.472,
+            "max_dd": 110.6417,
+            "bank": 212.6128
+          }
+        }
+      ],
+      "delta_train_pnl": 290.752,
+      "delta_test_pnl": 160.1932,
+      "history": [
+        {
+          "gen": 0,
+          "best_fit": 6.562139999999999,
+          "best_pnl": 37.0561,
+          "best_trades": 23
+        },
+        {
+          "gen": 1,
+          "best_fit": 6.562139999999999,
+          "best_pnl": 37.0561,
+          "best_trades": 23
+        },
+        {
+          "gen": 2,
+          "best_fit": 43.714345,
+          "best_pnl": 74.8172,
+          "best_trades": 27
+        },
+        {
+          "gen": 3,
+          "best_fit": 43.714345,
+          "best_pnl": 74.8172,
+          "best_trades": 27
+        },
+        {
+          "gen": 4,
+          "best_fit": 107.515255,
+          "best_pnl": 119.86,
+          "best_trades": 21
+        },
+        {
+          "gen": 5,
+          "best_fit": 107.515255,
+          "best_pnl": 119.86,
+          "best_trades": 21
+        },
+        {
+          "gen": 6,
+          "best_fit": 107.515255,
+          "best_pnl": 119.86,
+          "best_trades": 21
+        },
+        {
+          "gen": 7,
+          "best_fit": 107.515255,
+          "best_pnl": 119.86,
+          "best_trades": 21
+        },
+        {
+          "gen": 8,
+          "best_fit": 121.833675,
+          "best_pnl": 137.1873,
+          "best_trades": 22
+        },
+        {
+          "gen": 9,
+          "best_fit": 121.833675,
+          "best_pnl": 137.1873,
+          "best_trades": 22
+        },
+        {
+          "gen": 10,
+          "best_fit": 182.23108,
+          "best_pnl": 224.1419,
+          "best_trades": 46
+        },
+        {
+          "gen": 11,
+          "best_fit": 183.68628,
+          "best_pnl": 225.2198,
+          "best_trades": 46
+        },
+        {
+          "gen": 12,
+          "best_fit": 183.68628,
+          "best_pnl": 225.2198,
+          "best_trades": 46
+        },
+        {
+          "gen": 13,
+          "best_fit": 183.68628,
+          "best_pnl": 225.2198,
+          "best_trades": 46
+        },
+        {
+          "gen": 14,
+          "best_fit": 186.83652,
+          "best_pnl": 227.4571,
+          "best_trades": 46
+        },
+        {
+          "gen": 15,
+          "best_fit": 186.83652,
+          "best_pnl": 227.4571,
+          "best_trades": 46
+        },
+        {
+          "gen": 16,
+          "best_fit": 186.83652,
+          "best_pnl": 227.4571,
+          "best_trades": 46
+        },
+        {
+          "gen": 17,
+          "best_fit": 186.83652,
+          "best_pnl": 227.4571,
+          "best_trades": 46
+        },
+        {
+          "gen": 18,
+          "best_fit": 186.83732500000002,
+          "best_pnl": 227.1561,
+          "best_trades": 46
+        },
+        {
+          "gen": 19,
+          "best_fit": 186.83732500000002,
+          "best_pnl": 227.1561,
+          "best_trades": 46
+        },
+        {
+          "gen": 20,
+          "best_fit": 186.83732500000002,
+          "best_pnl": 227.1561,
+          "best_trades": 46
+        },
+        {
+          "gen": 21,
+          "best_fit": 186.83732500000002,
+          "best_pnl": 227.1561,
+          "best_trades": 46
+        }
+      ],
+      "min_trades_train": 12,
+      "min_trades_test": 7,
+      "pop": 28,
+      "gens": 22,
+      "other_folds": {
+        "expanding-50/75": {
+          "default": {
+            "train": {
+              "ok": true,
+              "reason": null,
+              "pnl": -22.0518,
+              "trades": 51,
+              "wins": 23,
+              "win_rate": 0.451,
+              "max_dd": 75.5776,
+              "bank": 77.9482
+            },
+            "test": {
+              "ok": true,
+              "reason": null,
+              "pnl": -36.0732,
+              "trades": 37,
+              "wins": 11,
+              "win_rate": 0.297,
+              "max_dd": 59.0676,
+              "bank": 63.9268
+            }
+          },
+          "best": {
+            "train": {
+              "ok": true,
+              "reason": null,
+              "pnl": 308.0521,
+              "trades": 30,
+              "wins": 17,
+              "win_rate": 0.567,
+              "max_dd": 57.3895,
+              "bank": 408.0521
+            },
+            "test": {
+              "ok": true,
+              "reason": null,
+              "pnl": -99.9998,
+              "trades": 17,
+              "wins": 5,
+              "win_rate": 0.294,
+              "max_dd": 99.9998,
+              "bank": 0.0003
+            }
+          }
+        },
+        "expanding-75/100": {
+          "default": {
+            "train": {
+              "ok": true,
+              "reason": null,
+              "pnl": -46.0376,
+              "trades": 88,
+              "wins": 34,
+              "win_rate": 0.386,
+              "max_dd": 100.9904,
+              "bank": 53.9624
+            },
+            "test": {
+              "ok": true,
+              "reason": null,
+              "pnl": -55.2169,
+              "trades": 37,
+              "wins": 10,
+              "win_rate": 0.27,
+              "max_dd": 76.1938,
+              "bank": 44.7831
+            }
+          },
+          "best": {
+            "train": {
+              "ok": true,
+              "reason": null,
+              "pnl": 335.5694,
+              "trades": 54,
+              "wins": 27,
+              "win_rate": 0.5,
+              "max_dd": 121.2328,
+              "bank": 435.5694
+            },
+            "test": {
+              "ok": true,
+              "reason": null,
+              "pnl": -99.9985,
+              "trades": 12,
+              "wins": 3,
+              "win_rate": 0.25,
+              "max_dd": 110.1415,
+              "bank": 0.0015
+            }
+          }
+        }
+      },
+      "seconds": 0.7
+    },
+    "naive_momentum": {
+      "strategy": "naive_momentum",
+      "default": {
+        "genome": {
+          "cap": 5.0,
+          "kelly": 0.25,
+          "min_edge": 0.04,
+          "min_stake": 1.0,
+          "left_lo": 50.0,
+          "left_hi": 65.0,
+          "max_ask": 0.85
+        },
+        "train": {
+          "ok": true,
+          "reason": null,
+          "pnl": -10.5271,
+          "trades": 21,
+          "wins": 12,
+          "win_rate": 0.571,
+          "max_dd": 19.9962,
+          "bank": 89.4729
+        },
+        "test": {
+          "ok": true,
+          "reason": null,
+          "pnl": 4.7785,
+          "trades": 9,
+          "wins": 7,
+          "win_rate": 0.778,
+          "max_dd": 4.9985,
+          "bank": 104.7785
+        },
+        "train_fitness": -17.5258
+      },
+      "best": {
+        "train_fitness": 281.3497,
+        "genome": {
+          "cap": 99.3527,
+          "kelly": 1.0,
+          "min_edge": 0.2235,
+          "min_stake": 36.9285,
+          "left_lo": 134.1243,
+          "left_hi": 239.1969,
+          "max_ask": 0.8158
+        },
+        "train": {
+          "ok": true,
+          "reason": null,
+          "pnl": 307.4398,
+          "trades": 93,
+          "wins": 67,
+          "win_rate": 0.72,
+          "max_dd": 74.5431,
+          "bank": 407.4398
+        },
+        "test": {
+          "ok": true,
+          "reason": null,
+          "pnl": -99.9963,
+          "trades": 10,
+          "wins": 4,
+          "win_rate": 0.4,
+          "max_dd": 99.9963,
+          "bank": 0.0037
+        }
+      },
+      "top": [
+        {
+          "train_fitness": 281.3497,
+          "genome": {
+            "cap": 99.3527,
+            "kelly": 1.0,
+            "min_edge": 0.2235,
+            "min_stake": 36.9285,
+            "left_lo": 134.1243,
+            "left_hi": 239.1969,
+            "max_ask": 0.8158
+          },
+          "train": {
+            "ok": true,
+            "reason": null,
+            "pnl": 307.4398,
+            "trades": 93,
+            "wins": 67,
+            "win_rate": 0.72,
+            "max_dd": 74.5431,
+            "bank": 407.4398
+          },
+          "test": {
+            "ok": true,
+            "reason": null,
+            "pnl": -99.9963,
+            "trades": 10,
+            "wins": 4,
+            "win_rate": 0.4,
+            "max_dd": 99.9963,
+            "bank": 0.0037
+          }
+        },
+        {
+          "train_fitness": 281.3497,
+          "genome": {
+            "cap": 84.0371,
+            "kelly": 0.2221,
+            "min_edge": 0.2235,
+            "min_stake": 48.1896,
+            "left_lo": 134.1243,
+            "left_hi": 239.1969,
+            "max_ask": 0.8158
+          },
+          "train": {
+            "ok": true,
+            "reason": null,
+            "pnl": 307.4398,
+            "trades": 93,
+            "wins": 67,
+            "win_rate": 0.72,
+            "max_dd": 74.5431,
+            "bank": 407.4398
+          },
+          "test": {
+            "ok": true,
+            "reason": null,
+            "pnl": -99.9963,
+            "trades": 10,
+            "wins": 4,
+            "win_rate": 0.4,
+            "max_dd": 99.9963,
+            "bank": 0.0037
+          }
+        },
+        {
+          "train_fitness": 277.1029,
+          "genome": {
+            "cap": 72.7578,
+            "kelly": 1.0,
+            "min_edge": 0.0984,
+            "min_stake": 36.9285,
+            "left_lo": 146.7088,
+            "left_hi": 239.1969,
+            "max_ask": 0.7912
+          },
+          "train": {
+            "ok": true,
+            "reason": null,
+            "pnl": 303.193,
+            "trades": 87,
+            "wins": 62,
+            "win_rate": 0.713,
+            "max_dd": 74.5431,
+            "bank": 403.193
+          },
+          "test": {
+            "ok": true,
+            "reason": null,
+            "pnl": -99.9988,
+            "trades": 19,
+            "wins": 10,
+            "win_rate": 0.526,
+            "max_dd": 107.5358,
+            "bank": 0.0012
+          }
+        },
+        {
+          "train_fitness": 277.1029,
+          "genome": {
+            "cap": 84.0371,
+            "kelly": 1.0,
+            "min_edge": 0.0984,
+            "min_stake": 48.1896,
+            "left_lo": 146.7088,
+            "left_hi": 239.1969,
+            "max_ask": 0.7912
+          },
+          "train": {
+            "ok": true,
+            "reason": null,
+            "pnl": 303.193,
+            "trades": 87,
+            "wins": 62,
+            "win_rate": 0.713,
+            "max_dd": 74.5431,
+            "bank": 403.193
+          },
+          "test": {
+            "ok": true,
+            "reason": null,
+            "pnl": -99.9988,
+            "trades": 19,
+            "wins": 10,
+            "win_rate": 0.526,
+            "max_dd": 107.5358,
+            "bank": 0.0012
+          }
+        },
+        {
+          "train_fitness": 277.1029,
+          "genome": {
+            "cap": 82.1739,
+            "kelly": 0.685,
+            "min_edge": 0.1608,
+            "min_stake": 15.3309,
+            "left_lo": 134.1243,
+            "left_hi": 239.1969,
+            "max_ask": 0.7912
+          },
+          "train": {
+            "ok": true,
+            "reason": null,
+            "pnl": 303.193,
+            "trades": 87,
+            "wins": 62,
+            "win_rate": 0.713,
+            "max_dd": 74.5431,
+            "bank": 403.193
+          },
+          "test": {
+            "ok": true,
+            "reason": null,
+            "pnl": -99.9988,
+            "trades": 19,
+            "wins": 10,
+            "win_rate": 0.526,
+            "max_dd": 107.5358,
+            "bank": 0.0012
+          }
+        }
+      ],
+      "delta_train_pnl": 317.9669,
+      "delta_test_pnl": -104.7748,
+      "history": [
+        {
+          "gen": 0,
+          "best_fit": 230.72811,
+          "best_pnl": 303.4593,
+          "best_trades": 129
+        },
+        {
+          "gen": 1,
+          "best_fit": 253.13099499999998,
+          "best_pnl": 311.3676,
+          "best_trades": 120
+        },
+        {
+          "gen": 2,
+          "best_fit": 253.13099499999998,
+          "best_pnl": 311.3676,
+          "best_trades": 120
+        },
+        {
+          "gen": 3,
+          "best_fit": 266.91035999999997,
+          "best_pnl": 325.147,
+          "best_trades": 121
+        },
+        {
+          "gen": 4,
+          "best_fit": 266.91035999999997,
+          "best_pnl": 325.147,
+          "best_trades": 121
+        },
+        {
+          "gen": 5,
+          "best_fit": 266.91035999999997,
+          "best_pnl": 325.147,
+          "best_trades": 121
+        },
+        {
+          "gen": 6,
+          "best_fit": 277.102915,
+          "best_pnl": 303.193,
+          "best_trades": 87
+        },
+        {
+          "gen": 7,
+          "best_fit": 277.102915,
+          "best_pnl": 303.193,
+          "best_trades": 87
+        },
+        {
+          "gen": 8,
+          "best_fit": 277.102915,
+          "best_pnl": 303.193,
+          "best_trades": 87
+        },
+        {
+          "gen": 9,
+          "best_fit": 277.102915,
+          "best_pnl": 303.193,
+          "best_trades": 87
+        },
+        {
+          "gen": 10,
+          "best_fit": 277.102915,
+          "best_pnl": 303.193,
+          "best_trades": 87
+        },
+        {
+          "gen": 11,
+          "best_fit": 277.102915,
+          "best_pnl": 303.193,
+          "best_trades": 87
+        },
+        {
+          "gen": 12,
+          "best_fit": 277.102915,
+          "best_pnl": 303.193,
+          "best_trades": 87
+        },
+        {
+          "gen": 13,
+          "best_fit": 277.102915,
+          "best_pnl": 303.193,
+          "best_trades": 87
+        },
+        {
+          "gen": 14,
+          "best_fit": 277.102915,
+          "best_pnl": 303.193,
+          "best_trades": 87
+        },
+        {
+          "gen": 15,
+          "best_fit": 277.102915,
+          "best_pnl": 303.193,
+          "best_trades": 87
+        },
+        {
+          "gen": 16,
+          "best_fit": 277.102915,
+          "best_pnl": 303.193,
+          "best_trades": 87
+        },
+        {
+          "gen": 17,
+          "best_fit": 277.102915,
+          "best_pnl": 303.193,
+          "best_trades": 87
+        },
+        {
+          "gen": 18,
+          "best_fit": 277.102915,
+          "best_pnl": 303.193,
+          "best_trades": 87
+        },
+        {
+          "gen": 19,
+          "best_fit": 277.102915,
+          "best_pnl": 303.193,
+          "best_trades": 87
+        },
+        {
+          "gen": 20,
+          "best_fit": 277.102915,
+          "best_pnl": 303.193,
+          "best_trades": 87
+        },
+        {
+          "gen": 21,
+          "best_fit": 281.349715,
+          "best_pnl": 307.4398,
+          "best_trades": 93
+        }
+      ],
+      "min_trades_train": 12,
+      "min_trades_test": 7,
+      "pop": 28,
+      "gens": 22,
+      "other_folds": {
+        "expanding-50/75": {
+          "default": {
+            "train": {
+              "ok": true,
+              "reason": null,
+              "pnl": -2.208,
+              "trades": 15,
+              "wins": 9,
+              "win_rate": 0.6,
+              "max_dd": 19.9962,
+              "bank": 97.792
+            },
+            "test": {
+              "ok": true,
+              "reason": null,
+              "pnl": -8.6806,
+              "trades": 9,
+              "wins": 5,
+              "win_rate": 0.556,
+              "max_dd": 13.1493,
+              "bank": 91.3194
+            }
+          },
+          "best": {
+            "train": {
+              "ok": true,
+              "reason": null,
+              "pnl": 124.2435,
+              "trades": 60,
+              "wins": 43,
+              "win_rate": 0.717,
+              "max_dd": 74.5431,
+              "bank": 224.2435
+            },
+            "test": {
+              "ok": true,
+              "reason": null,
+              "pnl": 137.3809,
+              "trades": 40,
+              "wins": 28,
+              "win_rate": 0.7,
+              "max_dd": 60.8149,
+              "bank": 237.3809
+            }
+          }
+        },
+        "expanding-75/100": {
+          "default": {
+            "train": {
+              "ok": true,
+              "reason": null,
+              "pnl": -10.8886,
+              "trades": 24,
+              "wins": 14,
+              "win_rate": 0.583,
+              "max_dd": 22.355,
+              "bank": 89.1114
+            },
+            "test": {
+              "ok": true,
+              "reason": null,
+              "pnl": 5.14,
+              "trades": 6,
+              "wins": 5,
+              "win_rate": 0.833,
+              "max_dd": 4.9985,
+              "bank": 105.14
+            }
+          },
+          "best": {
+            "train": {
+              "ok": true,
+              "reason": null,
+              "pnl": 261.6245,
+              "trades": 100,
+              "wins": 71,
+              "win_rate": 0.71,
+              "max_dd": 74.5431,
+              "bank": 361.6245
+            },
+            "test": {
+              "ok": true,
+              "reason": null,
+              "pnl": -99.9986,
+              "trades": 10,
+              "wins": 4,
+              "win_rate": 0.4,
+              "max_dd": 99.9986,
+              "bank": 0.0014
+            }
+          }
+        }
+      },
+      "seconds": 0.4
+    },
+    "every_round": {
+      "strategy": "every_round",
+      "default": {
+        "genome": {
+          "cap": 10.0,
+          "min_edge": 0.0,
+          "kelly": 0.0,
+          "min_stake": 1.0,
+          "preferred_left_hi": 150.0,
+          "preferred_left_lo": 20.0,
+          "fallback_left_min": 5.0,
+          "max_ask": 0.95,
+          "left_lo": 5.0,
+          "left_hi": 150.0
+        },
+        "train": {
+          "ok": true,
+          "reason": null,
+          "pnl": -71.9541,
+          "trades": 93,
+          "wins": 63,
+          "win_rate": 0.677,
+          "max_dd": 74.142,
+          "bank": 28.0459
+        },
+        "test": {
+          "ok": true,
+          "reason": null,
+          "pnl": -11.7525,
+          "trades": 51,
+          "wins": 37,
+          "win_rate": 0.725,
+          "max_dd": 45.236,
+          "bank": 88.2475
+        },
+        "train_fitness": -97.9038
+      },
+      "best": {
+        "train_fitness": 225.9089,
+        "genome": {
+          "cap": 61.5544,
+          "min_edge": 0.0,
+          "kelly": 0.6425,
+          "min_stake": 40.934,
+          "preferred_left_hi": 118.1885,
+          "preferred_left_lo": 5.0,
+          "fallback_left_min": 14.0149,
+          "max_ask": 0.7808,
+          "left_lo": 0.0,
+          "left_hi": 129.2338
+        },
+        "train": {
+          "ok": true,
+          "reason": null,
+          "pnl": 255.5535,
+          "trades": 35,
+          "wins": 23,
+          "win_rate": 0.657,
+          "max_dd": 84.699,
+          "bank": 355.5535
+        },
+        "test": {
+          "ok": true,
+          "reason": null,
+          "pnl": -12.0702,
+          "trades": 23,
+          "wins": 12,
+          "win_rate": 0.522,
+          "max_dd": 104.8117,
+          "bank": 87.9298
+        }
+      },
+      "top": [
+        {
+          "train_fitness": 225.9089,
+          "genome": {
+            "cap": 61.5544,
+            "min_edge": 0.0,
+            "kelly": 0.6425,
+            "min_stake": 40.934,
+            "preferred_left_hi": 118.1885,
+            "preferred_left_lo": 5.0,
+            "fallback_left_min": 14.0149,
+            "max_ask": 0.7808,
+            "left_lo": 0.0,
+            "left_hi": 129.2338
+          },
+          "train": {
+            "ok": true,
+            "reason": null,
+            "pnl": 255.5535,
+            "trades": 35,
+            "wins": 23,
+            "win_rate": 0.657,
+            "max_dd": 84.699,
+            "bank": 355.5535
+          },
+          "test": {
+            "ok": true,
+            "reason": null,
+            "pnl": -12.0702,
+            "trades": 23,
+            "wins": 12,
+            "win_rate": 0.522,
+            "max_dd": 104.8117,
+            "bank": 87.9298
+          }
+        },
+        {
+          "train_fitness": 209.6153,
+          "genome": {
+            "cap": 61.5544,
+            "min_edge": 0.1615,
+            "kelly": 0.308,
+            "min_stake": 3.2448,
+            "preferred_left_hi": 91.4403,
+            "preferred_left_lo": 5.0,
+            "fallback_left_min": 14.0149,
+            "max_ask": 0.7442,
+            "left_lo": 0.0,
+            "left_hi": 142.899
+          },
+          "train": {
+            "ok": true,
+            "reason": null,
+            "pnl": 239.1597,
+            "trades": 32,
+            "wins": 20,
+            "win_rate": 0.625,
+            "max_dd": 84.4125,
+            "bank": 339.1597
+          },
+          "test": {
+            "ok": true,
+            "reason": null,
+            "pnl": -22.1397,
+            "trades": 21,
+            "wins": 9,
+            "win_rate": 0.429,
+            "max_dd": 58.6268,
+            "bank": 77.8603
+          }
+        },
+        {
+          "train_fitness": 209.6153,
+          "genome": {
+            "cap": 61.5544,
+            "min_edge": 0.1026,
+            "kelly": 0.323,
+            "min_stake": 38.6728,
+            "preferred_left_hi": 91.4403,
+            "preferred_left_lo": 5.0,
+            "fallback_left_min": 14.0149,
+            "max_ask": 0.7442,
+            "left_lo": 0.0,
+            "left_hi": 129.2338
+          },
+          "train": {
+            "ok": true,
+            "reason": null,
+            "pnl": 239.1597,
+            "trades": 32,
+            "wins": 20,
+            "win_rate": 0.625,
+            "max_dd": 84.4125,
+            "bank": 339.1597
+          },
+          "test": {
+            "ok": true,
+            "reason": null,
+            "pnl": -22.1397,
+            "trades": 21,
+            "wins": 9,
+            "win_rate": 0.429,
+            "max_dd": 58.6268,
+            "bank": 77.8603
+          }
+        },
+        {
+          "train_fitness": 209.6153,
+          "genome": {
+            "cap": 61.5544,
+            "min_edge": 0.1615,
+            "kelly": 0.323,
+            "min_stake": 3.2448,
+            "preferred_left_hi": 91.4403,
+            "preferred_left_lo": 5.0,
+            "fallback_left_min": 14.0149,
+            "max_ask": 0.7442,
+            "left_lo": 0.0,
+            "left_hi": 227.1251
+          },
+          "train": {
+            "ok": true,
+            "reason": null,
+            "pnl": 239.1597,
+            "trades": 32,
+            "wins": 20,
+            "win_rate": 0.625,
+            "max_dd": 84.4125,
+            "bank": 339.1597
+          },
+          "test": {
+            "ok": true,
+            "reason": null,
+            "pnl": -22.1397,
+            "trades": 21,
+            "wins": 9,
+            "win_rate": 0.429,
+            "max_dd": 58.6268,
+            "bank": 77.8603
+          }
+        },
+        {
+          "train_fitness": 209.6153,
+          "genome": {
+            "cap": 61.5544,
+            "min_edge": 0.0,
+            "kelly": 1.0,
+            "min_stake": 3.2448,
+            "preferred_left_hi": 91.4403,
+            "preferred_left_lo": 5.0,
+            "fallback_left_min": 14.0149,
+            "max_ask": 0.7442,
+            "left_lo": 0.0,
+            "left_hi": 100.2931
+          },
+          "train": {
+            "ok": true,
+            "reason": null,
+            "pnl": 239.1597,
+            "trades": 32,
+            "wins": 20,
+            "win_rate": 0.625,
+            "max_dd": 84.4125,
+            "bank": 339.1597
+          },
+          "test": {
+            "ok": true,
+            "reason": null,
+            "pnl": -22.1397,
+            "trades": 21,
+            "wins": 9,
+            "win_rate": 0.429,
+            "max_dd": 58.6268,
+            "bank": 77.8603
+          }
+        }
+      ],
+      "delta_train_pnl": 327.5076,
+      "delta_test_pnl": -0.3177,
+      "history": [
+        {
+          "gen": 0,
+          "best_fit": 115.18005,
+          "best_pnl": 139.6762,
+          "best_trades": 35
+        },
+        {
+          "gen": 1,
+          "best_fit": 139.94557,
+          "best_pnl": 163.9324,
+          "best_trades": 34
+        },
+        {
+          "gen": 2,
+          "best_fit": 139.94557,
+          "best_pnl": 163.9324,
+          "best_trades": 34
+        },
+        {
+          "gen": 3,
+          "best_fit": 142.71832,
+          "best_pnl": 165.2957,
+          "best_trades": 24
+        },
+        {
+          "gen": 4,
+          "best_fit": 144.678795,
+          "best_pnl": 170.6293,
+          "best_trades": 34
+        },
+        {
+          "gen": 5,
+          "best_fit": 144.678795,
+          "best_pnl": 170.6293,
+          "best_trades": 34
+        },
+        {
+          "gen": 6,
+          "best_fit": 144.678795,
+          "best_pnl": 170.6293,
+          "best_trades": 34
+        },
+        {
+          "gen": 7,
+          "best_fit": 161.35041999999999,
+          "best_pnl": 188.7123,
+          "best_trades": 30
+        },
+        {
+          "gen": 8,
+          "best_fit": 161.35041999999999,
+          "best_pnl": 188.7123,
+          "best_trades": 30
+        },
+        {
+          "gen": 9,
+          "best_fit": 188.81122,
+          "best_pnl": 217.1524,
+          "best_trades": 31
+        },
+        {
+          "gen": 10,
+          "best_fit": 188.81122,
+          "best_pnl": 217.1524,
+          "best_trades": 31
+        },
+        {
+          "gen": 11,
+          "best_fit": 188.81122,
+          "best_pnl": 217.1524,
+          "best_trades": 31
+        },
+        {
+          "gen": 12,
+          "best_fit": 188.81122,
+          "best_pnl": 217.1524,
+          "best_trades": 31
+        },
+        {
+          "gen": 13,
+          "best_fit": 188.81122,
+          "best_pnl": 217.1524,
+          "best_trades": 31
+        },
+        {
+          "gen": 14,
+          "best_fit": 203.30742999999998,
+          "best_pnl": 231.2256,
+          "best_trades": 31
+        },
+        {
+          "gen": 15,
+          "best_fit": 209.61532499999998,
+          "best_pnl": 239.1597,
+          "best_trades": 32
+        },
+        {
+          "gen": 16,
+          "best_fit": 225.90885000000003,
+          "best_pnl": 255.5535,
+          "best_trades": 35
+        },
+        {
+          "gen": 17,
+          "best_fit": 225.90885000000003,
+          "best_pnl": 255.5535,
+          "best_trades": 35
+        },
+        {
+          "gen": 18,
+          "best_fit": 225.90885000000003,
+          "best_pnl": 255.5535,
+          "best_trades": 35
+        },
+        {
+          "gen": 19,
+          "best_fit": 225.90885000000003,
+          "best_pnl": 255.5535,
+          "best_trades": 35
+        },
+        {
+          "gen": 20,
+          "best_fit": 225.90885000000003,
+          "best_pnl": 255.5535,
+          "best_trades": 35
+        },
+        {
+          "gen": 21,
+          "best_fit": 225.90885000000003,
+          "best_pnl": 255.5535,
+          "best_trades": 35
+        }
+      ],
+      "min_trades_train": 12,
+      "min_trades_test": 7,
+      "pop": 28,
+      "gens": 22,
+      "other_folds": {
+        "expanding-50/75": {
+          "default": {
+            "train": {
+              "ok": true,
+              "reason": null,
+              "pnl": -66.6282,
+              "trades": 58,
+              "wins": 36,
+              "win_rate": 0.621,
+              "max_dd": 72.8691,
+              "bank": 33.3718
+            },
+            "test": {
+              "ok": true,
+              "reason": null,
+              "pnl": 18.6776,
+              "trades": 44,
+              "wins": 34,
+              "win_rate": 0.773,
+              "max_dd": 27.4835,
+              "bank": 118.6776
+            }
+          },
+          "best": {
+            "train": {
+              "ok": true,
+              "reason": null,
+              "pnl": 256.9021,
+              "trades": 23,
+              "wins": 17,
+              "win_rate": 0.739,
+              "max_dd": 84.4125,
+              "bank": 356.9021
+            },
+            "test": {
+              "ok": true,
+              "reason": null,
+              "pnl": 15.4225,
+              "trades": 18,
+              "wins": 11,
+              "win_rate": 0.611,
+              "max_dd": 88.0967,
+              "bank": 115.4225
+            }
+          }
+        },
+        "expanding-75/100": {
+          "default": {
+            "train": {
+              "ok": true,
+              "reason": null,
+              "pnl": -65.9791,
+              "trades": 102,
+              "wins": 70,
+              "win_rate": 0.686,
+              "max_dd": 74.142,
+              "bank": 34.0209
+            },
+            "test": {
+              "ok": true,
+              "reason": null,
+              "pnl": -32.5588,
+              "trades": 42,
+              "wins": 30,
+              "win_rate": 0.714,
+              "max_dd": 40.1971,
+              "bank": 67.4412
+            }
+          },
+          "best": {
+            "train": {
+              "ok": true,
+              "reason": null,
+              "pnl": 314.2469,
+              "trades": 41,
+              "wins": 28,
+              "win_rate": 0.683,
+              "max_dd": 97.8479,
+              "bank": 414.2469
+            },
+            "test": {
+              "ok": true,
+              "reason": null,
+              "pnl": -25.3396,
+              "trades": 17,
+              "wins": 7,
+              "win_rate": 0.412,
+              "max_dd": 51.9391,
+              "bank": 74.6604
+            }
+          }
+        }
+      },
+      "seconds": 0.5
+    }
+  },
+  "skipped": {}
+}

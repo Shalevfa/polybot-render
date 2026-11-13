@@ -96,6 +96,15 @@
   dialog h3 { margin-bottom: 8px; }
   dialog p { font-size: 13px; color: var(--muted); margin-bottom: 12px; line-height: 1.45; }
   .buy-box { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+  .gene-dec { font-size: 22px; font-weight: 800; margin: 4px 0 8px; }
+  .gene-dec.wait { color: var(--muted); }
+  .gene-dec.up { color: var(--green); }
+  .gene-dec.down { color: var(--red); }
+  .lb { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .lb th, .lb td { text-align: right; padding: 5px 8px; border-bottom: 1px solid var(--line); }
+  .lb .champ { color: var(--gold); font-weight: 700; }
+  .params { font-size: 12px; color: var(--muted); line-height: 1.55; }
+  .params b { color: var(--text); }
   .lock { font-size: 12px; color: var(--muted); }
 </style>
 </head>
@@ -141,6 +150,26 @@
     </div>
     <p class="note">הקנייה מדמה הליכה בספר הפקודות החי, עם אותה עמלת טייקר שהאחרים משלמים. רק כשהשוק פתוח לקבלת פקודות, והמתג הראשי דלוק.</p>
     <div class="msg" id="buyMsg"></div>
+  </div>
+
+  <div class="card" id="geneticCard" hidden>
+    <h2>אוכלוסייה גנטית (דמו)</h2>
+    <div class="stats">
+      <div class="stat"><div class="k">דור</div><div class="v mono" id="geneGen">—</div></div>
+      <div class="stat"><div class="k">סיבובים מאז אבולוציה</div><div class="v mono" id="geneRounds">—</div></div>
+    </div>
+    <div class="gene-dec wait" id="geneDec">WAIT</div>
+    <p class="note" id="geneReason"></p>
+    <h2 style="margin-top:14px">האלופה הנוכחית</h2>
+    <div class="params" id="geneBest">—</div>
+    <h2 style="margin-top:14px">לוח מובילים</h2>
+    <div style="overflow:auto">
+      <table class="lb">
+        <thead><tr><th></th><th>PnL</th><th>עסקאות</th><th>כושר</th></tr></thead>
+        <tbody id="geneBoard"></tbody>
+      </table>
+    </div>
+    <p class="note">כל גרסה נבדקת בצל על כל סיבוב, עם אותן עמלות והליכה בספר. רק האלופה סוחרת בקופה האמיתית של הבוט הזה. כיבוי עוצר כניסות חדשות, לא מוחק את האוכלוסייה.</p>
   </div>
 
   <div class="card">
@@ -203,6 +232,7 @@ const NAMES = {
   every_round: "כל סיבוב · every_round",
   momentum_late: "מומנטום מאוחר · momentum_late",
   latency_hunter: "צייד השהיה · latency_hunter",
+  genetic: "גנטי · genetic",
   manual: "בוט ידני · manual",
 };
 const MODE_HE = { active: "פעיל", off: "כבוי", paused: "מושהה" };
@@ -340,6 +370,33 @@ function renderTrades(rows) {
   }).join("");
 }
 
+
+function renderGenetic(s) {
+  const g = s.genetic || {};
+  const ev = g.evolve_every != null ? g.evolve_every : "—";
+  document.getElementById("geneGen").textContent = g.generation != null ? g.generation : "—";
+  const since = g.rounds_since_evolve != null ? g.rounds_since_evolve : "—";
+  document.getElementById("geneRounds").textContent = since + " / " + ev;
+  const dec = g.decision || s.decision || "WAIT";
+  const el = document.getElementById("geneDec");
+  el.textContent = dec;
+  el.className = "gene-dec " + (dec === "BUY_UP" ? "up" : dec === "BUY_DOWN" ? "down" : "wait");
+  document.getElementById("geneReason").textContent = g.decision_reason || s.decision_reason || "";
+  const best = g.best || {};
+  const genome = best.genome || {};
+  const keys = Object.keys(genome);
+  const bits = keys.map(k => `<b>${k}</b> ${Number(genome[k]).toFixed(3)}`).join(" · ");
+  const head = best.champion ? "אלופה" : "מובילה";
+  document.getElementById("geneBest").innerHTML = bits
+    ? `${head} · PnL ${fmtUsd(best.pnl)}$ · ${best.trades || 0} עסקאות<br>${bits}`
+    : "עדיין אין אלופה — האוכלוסייה תתחיל בסיבובים הבאים.";
+  const rows = g.leaderboard || [];
+  document.getElementById("geneBoard").innerHTML = rows.map((r, i) => {
+    const mark = r.champion ? "★ אלופה" : (i + 1);
+    return `<tr class="${r.champion ? "champ" : ""}"><td>${mark}</td><td class="mono">${fmtUsd(r.pnl)}</td><td class="mono">${r.trades || 0}</td><td class="mono">${r.fitness != null ? Number(r.fitness).toFixed(2) : "—"}</td></tr>`;
+  }).join("") || `<tr><td colspan="4">אין עדיין תוצאות צל</td></tr>`;
+}
+
 function applyBot(d) {
   const strats = d.strategies || [];
   const s = strats.find(x => x.name === NAME);
@@ -363,6 +420,8 @@ function applyBot(d) {
   document.getElementById("swRisk").checked = !!s.settings && !!s.settings.risk_management;
   document.getElementById("swAlerts").checked = !!s.settings && !!s.settings.alerts;
   document.getElementById("manualCard").hidden = NAME !== "manual";
+  document.getElementById("geneticCard").hidden = NAME !== "genetic";
+  if (NAME === "genetic") renderGenetic(s);
   renderStats(s);
   if (s.schema && s.schema.length) renderFields(s.schema, s.settings || s.defaults || {});
   const rows = (d.trades_by_strategy && d.trades_by_strategy[NAME]) || [];

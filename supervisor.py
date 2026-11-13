@@ -353,7 +353,8 @@ def restore():
             n = c.execute("select count(*), coalesce(sum(settled),0) from trades").fetchone()
             c.close()
             for name, dst in (("trades.csv", CSV), ("price_hist.json", HIST),
-                              ("settings.json", os.path.join(APP, "settings.json"))):
+                              ("settings.json", os.path.join(APP, "settings.json")),
+                              ("genetic_state.json", os.path.join(APP, "genetic_state.json"))):
                 try:
                     q = hf_hub_download(STATE_REPO, name, repo_type="dataset", token=HF_TOKEN, local_dir=tmp, force_download=True)
                     shutil.copyfile(q, dst)
@@ -394,7 +395,14 @@ def db_sig():
             arch = c.execute("select coalesce(sum(archived),0) from trades").fetchone()[0]
         except Exception:
             arch = 0
-        return list(trades) + [rev, arch]
+        gene = 0
+        try:
+            gp = os.path.join(APP, "genetic_state.json")
+            if os.path.exists(gp):
+                gene = os.path.getmtime(gp)
+        except Exception:
+            gene = 0
+        return list(trades) + [rev, arch, gene]
     finally:
         c.close()
 
@@ -428,6 +436,12 @@ def upload_snapshot(reason):
         open(os.path.join(APP, "settings.json"), "wb").write(settings_bytes)
     except Exception as e:
         log("settings.json snapshot skip", repr(e)[:120])
+    try:
+        gpath = os.path.join(APP, "genetic_state.json")
+        if os.path.exists(gpath):
+            ops.append(CommitOperationAdd("genetic_state.json", open(gpath, "rb").read()))
+    except Exception as e:
+        log("genetic_state.json snapshot skip", repr(e)[:120])
     ops.append(CommitOperationAdd("meta.json", json.dumps({"sig": sig, "at": time.strftime("%F %T %Z"),
                                                            "reason": reason, "space": SPACE_HOST}).encode()))
     api().create_commit(STATE_REPO, ops, repo_type="dataset", commit_message=f"snapshot {reason} {sig}")

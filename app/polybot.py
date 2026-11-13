@@ -4,6 +4,7 @@ NO real money, NO wallet, NO keys. Reads public data only and simulates taker fi
 against the live CLOB order book.
 """
 import json, math, os, signal, sqlite3, threading, time, traceback, csv
+from types import SimpleNamespace
 from datetime import datetime, timezone
 import requests, websocket
 from latency_hunter import LatencyHunter, HunterConfig
@@ -1010,7 +1011,59 @@ class Manual(Strategy):
         return None, "manual: no auto entries"
 
 
-STRATS = [LateModel(), LateModelRaw(), EarlyValue(), NaiveMomentum(), EveryRound(), MomentumLate(), LatencyHunterStrategy(), Manual()]
+class Genetic(Strategy):
+    """GENETIC (PAPER ONLY). Keeps a small population of parameter genomes,
+    tracks each virtually with the same fees and book-walk as live paper trading,
+    and lets the current champion trade this bot's own $100 bankroll.
+    Evolves every N settled rounds. Does not change the other bots."""
+    name = "genetic"
+    min_edge = 0.04
+    max_disagree = 0.30
+    w = 0.6
+    kelly = 0.50
+    cash_frac_cap = 0.12
+    min_stake = 3.0
+    cap = 10.0
+    left_lo = 5
+    left_hi = 75
+    MIN_ASK = 0.03
+    MAX_ASK = 0.97
+
+    def __init__(self):
+        super().__init__()
+        self.engine = None
+        self.last_signal = None
+
+    def active(self, el, left):
+        eng = self.engine
+        if eng and eng.champion():
+            g = eng.champion()["genome"]
+            return g["left_lo"] <= left <= g["left_hi"]
+        return self.left_lo <= left <= self.left_hi
+
+    def on_observe(self, m, mp, books, el, left):
+        if self.engine:
+            self.engine.observe(m, mp, books, el, left)
+
+    def on_window_settled(self, slug, official):
+        if self.engine:
+            self.engine.on_window_settled(slug, official)
+
+    def side_choice(self, m, mp, books):
+        if not self.engine:
+            return None, "genetic: no engine"
+        left = m.end - time.time()
+        ch, why = self.engine.champion_choice(m, mp, books, left)
+        self.last_signal = SimpleNamespace(
+            action=self.engine.last_decision,
+            reason=self.engine.last_reason,
+            net_edge=(ch[2] if ch else 0.0),
+            confidence=(ch[1] if ch else 0.0),
+        )
+        return ch, why
+
+
+STRATS = [LateModel(), LateModelRaw(), EarlyValue(), NaiveMomentum(), EveryRound(), MomentumLate(), LatencyHunterStrategy(), Genetic(), Manual()]
 PRIMARY = "late_model"
 
 # ---------------------------------------------------------------- bot
@@ -1039,6 +1092,11 @@ class Bot:
         for s in STRATS:
             if s.name == "late_add":
                 s.open_late_side = self.open_late_side
+            if s.name == "genetic":
+                from genetic_engine import GeneticEngine
+                s.engine = GeneticEngine(os.path.join(BASE, "genetic_state.json"))
+                s.engine.load()
+                s.engine.configure((self.settings or {}).get("genetic"))
 
     def open_late_side(self, slug):
         """Prefer an unsettled late_model position in this window; else late_model_raw."""
@@ -1093,6 +1151,8 @@ class Bot:
             base = HunterConfig()
             merged = {**{f: getattr(base, f) for f in base.__dataclass_fields__}, **kw}
             st.hunter.config = HunterConfig(**{k: merged[k] for k in base.__dataclass_fields__})
+        if st.name == "genetic" and getattr(st, "engine", None):
+            st.engine.configure(cfg)
 
     def _can_open(self, st, auto=False):
         try:
@@ -1449,9 +1509,46 @@ class Bot:
             with self.dblock:
                 row = self.c.execute("select snaps from windows where slug=?", (m.slug,)).fetchone()
                 snaps = json.loads(row[0]) if row and row[0] else []
+                def _lvls(side, leg, n=8):
+                    arr = books.get(side, ([], [], None))[leg] or []
+                    out = []
+                    for p, sz in arr[:n]:
+                        try:
+                            out.append([round(float(p), 4), round(float(sz), 4)])
+                        except (TypeError, ValueError):
+                            pass
+                    return out
                 ua = books["Up"][0][0][0] if books["Up"][0] else None
                 da = books["Down"][0][0][0] if books["Down"][0] else None
-                snaps.append(dict(left=round(left), p=round(mp["p"], 4), up_ask=ua, down_ask=da, spot=round(mp["spot"], 2), cl=round(mp["cl"], 2), src=mp["src"], lag=self.feed.lag))
+                ub = books["Up"][1][0][0] if books["Up"][1] else None
+                db = books["Down"][1][0][0] if books["Down"][1] else None
+                px_path, px_src = [], None
+                try:
+                    src0 = (mp.get("src") or "").split("+")[0]
+                    now_s = int(time.time())
+                    xs = None
+                    if src0 in Feed.EXCHANGES:
+                        xs = self.feed.ex_series(src0, now_s - 70, now_s)
+                        px_src = src0
+                    if xs is None or sum(1 for v in xs if v is None) > 15:
+                        k, _ = self.feed.latest()
+                        if k:
+                            xs = self.feed.series(k - 70, k)
+                            px_src = "chainlink"
+                    if xs:
+                        px_path = [None if v is None else round(float(v), 2) for v in xs]
+                except Exception:
+                    px_path, px_src = [], None
+                snaps.append(dict(
+                    left=round(left), p=round(mp["p"], 4),
+                    sd=None if mp.get("sd") is None else round(float(mp["sd"]), 4),
+                    sig=None if mp.get("sig") is None else round(float(mp["sig"]), 6),
+                    up_ask=ua, down_ask=da, up_bid=ub, down_bid=db,
+                    up_asks=_lvls("Up", 0), down_asks=_lvls("Down", 0),
+                    up_bids=_lvls("Up", 1), down_bids=_lvls("Down", 1),
+                    spot=round(mp["spot"], 2), cl=round(mp["cl"], 2), src=mp["src"], lag=self.feed.lag,
+                    px=px_path, px_src=px_src,
+                ))
                 self.c.execute("insert into windows(slug,start,open_px,snaps) values(?,?,?,?) on conflict(slug) do update set open_px=excluded.open_px, snaps=excluded.snaps",
                                (m.slug, m.start, m.open_px, json.dumps(snaps))); self.c.commit()
         except Exception as e: log("snap err", e)
@@ -1463,7 +1560,7 @@ class Bot:
             if now - m.loaded > 3: m.load(slow=False)
         if not m.tokens or m.open_px is None or not m.accepting: return
         act = [s for s in STRATS if m.slug not in s.done and s.active(el, left) and self._can_open(s, auto=True)]
-        due = [x for x in (240, 180, 120, 90, 60, 30, 15) if left <= x and x not in m.snapped and left > x - 10]
+        due = [x for x in (270, 240, 210, 180, 150, 120, 90, 75, 60, 45, 30, 20, 15, 10) if left <= x and x not in m.snapped and left > x - 8]
         want_snap = bool(due)
         if due: m.snapped.update(due)
         if not act and not want_snap: return
@@ -1478,6 +1575,13 @@ class Bot:
             for s in act: self.count_skip(m, s, "book_error")
             log("book err", e); return
         if want_snap: self.snap(m, mp, books, left)
+        for s in STRATS:
+            obs = getattr(s, "on_observe", None)
+            if callable(obs):
+                try:
+                    obs(m, mp, books, el, left)
+                except Exception:
+                    log("observe err", traceback.format_exc())
         pre = None
         if not g_ok:
             pre = (g_why, f"data gate: {g_why} {g_det}")
@@ -1566,6 +1670,14 @@ class Bot:
                 log(f"SETTLE #{tid} {slug} {side} -> winner {winner} pnl ${pnl:+.2f}")
             if prev_official is None or (check is not None and existing and existing[3] is None) or close_px is not None:
                 log(f"RESOLVED {slug} official={winner} close={close_px} open={open_px if open_px is not None else ox} my_twap60={my_twap} my_spot_end={my_spot} check={check}")
+            if prev_official is None and winner in ("Up", "Down"):
+                for s in STRATS:
+                    fn = getattr(s, "on_window_settled", None)
+                    if callable(fn):
+                        try:
+                            fn(slug, winner)
+                        except Exception:
+                            log("settle hook err", traceback.format_exc())
             self._settle_fail.pop(slug, None)
             self._settle_next.pop(slug, None)
 
@@ -1587,6 +1699,10 @@ class Bot:
                     rec["decision_reason"] = sig.reason
                     rec["decision_net_edge"] = round(float(sig.net_edge), 4)
                     rec["decision_confidence"] = round(float(sig.confidence), 4)
+                if s.name == "genetic" and getattr(s, "engine", None):
+                    rec["genetic"] = s.engine.public_state()
+                    rec["decision"] = rec["genetic"].get("decision") or rec.get("decision")
+                    rec["decision_reason"] = rec["genetic"].get("decision_reason") or rec.get("decision_reason")
                 cfg = (self.settings or {}).get(s.name) or bot_settings.defaults_for(s.name)
                 rec["enabled"] = bool(cfg.get("enabled", True))
                 rec["auto_trading"] = bool(cfg.get("auto_trading", s.name != "manual"))

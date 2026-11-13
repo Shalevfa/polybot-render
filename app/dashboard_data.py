@@ -45,6 +45,7 @@ STRATEGY_ORDER = [
     "every_round",
     "momentum_late",
     "latency_hunter",
+    "genetic",
     "manual",
 ]
 GATE_REASON_HE = {

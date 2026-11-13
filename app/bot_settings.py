@@ -42,6 +42,9 @@ RANGES = {
     "min_seconds_remaining": (0.0, 200.0),
     "cooldown_seconds": (0.0, 300.0),
     "typical_stake": (1.0, 50.0),
+    "pop_size": (4.0, 30.0),
+    "evolve_every": (4.0, 100.0),
+    "mutation_rate": (0.05, 0.80),
 }
 
 BOOLS = ("enabled", "auto_trading", "risk_management", "alerts")
@@ -98,6 +101,14 @@ STRATEGY_DEFAULTS = {
         "min_edge": 0.0, "kelly": 0.0, "cap": 20.0, "cash_frac_cap": 1.0, "min_stake": 1.0,
         "max_ask": 0.99, "stop_loss": 0.0, "take_profit": 0.0,
     },
+    "genetic": {
+        "enabled": True, "auto_trading": True, "risk_management": False, "alerts": False,
+        "min_edge": 0.04, "max_disagree": 0.30, "w": 0.6, "kelly": 0.50,
+        "cash_frac_cap": 0.12, "min_stake": 3.0, "cap": 10.0,
+        "left_lo": 5.0, "left_hi": 75.0, "min_ask": 0.03, "max_ask": 0.97,
+        "pop_size": 10.0, "evolve_every": 12.0, "mutation_rate": 0.20,
+        "stop_loss": 0.0, "take_profit": 0.0,
+    },
 }
 
 # late_model_raw.max_disagree is 9 (sentinel). Allow a wider range just for that field when name matches.
@@ -135,6 +146,9 @@ FIELD_LABELS_HE = {
     "min_seconds_remaining": "מינימום שניות לסיום",
     "cooldown_seconds": "המתנה בין עסקאות (שניות)",
     "typical_stake": "סכום טיפוסי להערכת החלקה ($)",
+    "pop_size": "גודל האוכלוסייה",
+    "evolve_every": "אבולוציה כל כמה סיבובים",
+    "mutation_rate": "שיעור מוטציה",
 }
 
 HUNTER_CONFIG_KEYS = (
