@@ -82,21 +82,116 @@ def health() -> dict:
     alive = all(p.poll() is None for p in procs.values()) and bool(procs)
     h["ok"] = bool(alive and h.get("status_age_s") is not None and h["status_age_s"] < 30
                    and (not PRIMARY or (h["push_age_s"] is not None and h["push_age_s"] < 60)))
+    with _stream_lock:
+        h["stream"] = {"clients": _stream_clients, "ver": _stream["ver"], "last_age_s": None if not _stream["at"] else round(time.time() - _stream["at"], 2)}
     return h
+
+
+# Public read-only live stream for the Vercel origin (no secrets, no writes).
+ALLOWED_ORIGINS = {"https://polybot-btc5m.vercel.app"}
+MAX_SSE_CLIENTS = 24
+STREAM_INTERVAL = 1.0
+_stream = {"payload": None, "ver": 0, "at": 0.0, "cv": threading.Condition()}
+_stream_lock = threading.Lock()
+_stream_clients = 0
+
+
+def _cors_origin(handler):
+    origin = (handler.headers.get("Origin") or "").rstrip("/")
+    if origin in ALLOWED_ORIGINS:
+        return origin
+    # Non-browser clients (no Origin) may read; browsers always send Origin on cross-site.
+    if not origin:
+        return ""
+    return None
+
+
+def _add_cors(handler, origin):
+    if origin:
+        handler.send_header("Access-Control-Allow-Origin", origin)
+        handler.send_header("Vary", "Origin")
+        handler.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        handler.send_header("Access-Control-Allow-Headers", "Cache-Control")
+        handler.send_header("Access-Control-Max-Age", "600")
+
+
+def _trim_live(d: dict) -> dict:
+    if not isinstance(d, dict):
+        return d
+    d.pop("html_version", None)
+    s = d.get("series") or []
+    if len(s) > 120:
+        step = len(s) / 120
+        s = [s[int(i * step)] for i in range(119)] + [s[-1]]
+    out_series = []
+    for p in s:
+        try:
+            out_series.append({"t": round(p["t"], 1), "btc": round(p["btc"], 2), "nowcast": round(p.get("nowcast") or p["btc"], 2)})
+        except Exception:
+            continue
+    d["series"] = out_series
+    for st in d.get("strategies") or []:
+        if isinstance(st, dict):
+            st.pop("doc", None)
+    d["pushed_at"] = time.time()
+    return d
+
+
+def stream_loop():
+    """Refresh the shared live payload about once a second for SSE subscribers."""
+    last_sig = None
+    port = os.environ.get("POLYBOT_DASH_PORT", "8765")
+    url = f"http://127.0.0.1:{port}/api/live"
+    sess = requests.Session()
+    while not stopping.is_set():
+        t0 = time.time()
+        try:
+            r = sess.get(url, timeout=3)
+            r.raise_for_status()
+            payload = json.dumps(_trim_live(r.json()), ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+            sig = hash(payload)
+            if sig != last_sig:
+                last_sig = sig
+                with _stream["cv"]:
+                    _stream["payload"] = payload
+                    _stream["ver"] += 1
+                    _stream["at"] = time.time()
+                    _stream["cv"].notify_all()
+        except Exception:
+            sess.close()
+            sess = requests.Session()
+        time.sleep(max(0.05, STREAM_INTERVAL - (time.time() - t0)))
 
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
-    def _send(self, code, obj):
-        b = json.dumps(obj, ensure_ascii=False, indent=1).encode()
+    def _send(self, code, obj, compact=False):
+        origin = _cors_origin(self)
+        b = json.dumps(obj, ensure_ascii=False, indent=None if compact else 1, separators=(",", ":") if compact else None).encode()
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(b)))
+        _add_cors(self, origin)
         self.end_headers()
         self.wfile.write(b)
+
+    def do_OPTIONS(self):
+        origin = _cors_origin(self)
+        path = self.path.split("?")[0]
+        if path not in ("/api/live", "/api/live/", "/api/stream", "/api/stream/"):
+            self.send_response(404)
+            self.end_headers()
+            return
+        if origin is None:
+            self.send_response(403)
+            self.end_headers()
+            return
+        self.send_response(204)
+        _add_cors(self, origin)
+        self.end_headers()
 
     def do_GET(self):
         path = self.path.split("?")[0]
@@ -108,13 +203,61 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200 if r.returncode == 0 else 500, json.loads(r.stdout) if r.returncode == 0 else {"err": r.stderr.decode()[-500:]})
             if path == "/status":
                 return self._send(200, json.load(open(STATUS)))
-            if path == "/api/live":
+            if path in ("/api/live", "/api/live/"):
+                origin = _cors_origin(self)
+                if origin is None:
+                    return self._send(403, {"err": "origin not allowed"})
                 port = os.environ.get("POLYBOT_DASH_PORT", "8765")
-                r = requests.get(f"http://127.0.0.1:{port}/api/live", timeout=10)
-                return self._send(r.status_code, r.json())
-            self._send(404, {"err": "not found", "paths": ["/health", "/status", "/stats", "/api/live"]})
+                r = requests.get(f"http://127.0.0.1:{port}/api/live", timeout=4)
+                body = _trim_live(r.json()) if r.status_code == 200 else {"err": "upstream"}
+                return self._send(r.status_code, body, compact=True)
+            if path in ("/api/stream", "/api/stream/"):
+                return self._sse()
+            self._send(404, {"err": "not found", "paths": ["/health", "/status", "/stats", "/api/live", "/api/stream"]})
         except Exception as e:
             self._send(500, {"err": repr(e)[:300]})
+
+    def _sse(self):
+        global _stream_clients
+        origin = _cors_origin(self)
+        if origin is None:
+            return self._send(403, {"err": "origin not allowed"})
+        with _stream_lock:
+            if _stream_clients >= MAX_SSE_CLIENTS:
+                return self._send(429, {"err": "too many stream clients"})
+            _stream_clients += 1
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Connection", "keep-alive")
+            self.send_header("X-Accel-Buffering", "no")
+            _add_cors(self, origin if origin else "https://polybot-btc5m.vercel.app")
+            self.end_headers()
+            self.wfile.write(b"retry: 2000\n\n")
+            self.wfile.flush()
+            last_ver = -1
+            last_send = 0.0
+            while not stopping.is_set():
+                with _stream["cv"]:
+                    if _stream["ver"] == last_ver:
+                        _stream["cv"].wait(timeout=1.0)
+                    ver = _stream["ver"]
+                    payload = _stream["payload"]
+                if ver != last_ver and payload:
+                    last_ver = ver
+                    last_send = time.time()
+                    self.wfile.write(b"data: " + payload + b"\n\n")
+                    self.wfile.flush()
+                elif time.time() - last_send > 5:
+                    last_send = time.time()
+                    self.wfile.write(b": ping\n\n")
+                    self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            pass
+        finally:
+            with _stream_lock:
+                _stream_clients = max(0, _stream_clients - 1)
 
     def do_POST(self):
         path = self.path.split("?")[0]
@@ -566,6 +709,7 @@ def main():
     signal.signal(signal.SIGTERM, on_term)
     signal.signal(signal.SIGINT, on_term)
     threading.Thread(target=serve, daemon=True, name="http").start()
+    threading.Thread(target=stream_loop, daemon=True, name="stream").start()
     log(f"mode={MODE} state_repo={STATE_REPO} space={SPACE_HOST or os.environ.get("RENDER_EXTERNAL_URL") or '-'} PAPER ONLY")
     choose_binance()
     with lock:

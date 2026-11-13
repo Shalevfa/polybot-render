@@ -582,6 +582,14 @@ def build_payload() -> dict:
                       model_p, edge, secs_left, outcome, pnl, settled, settled_time, open_px, spot
                from trades where {live} order by id desc limit 15""".format(live=live_sql(con))
         ).fetchall()
+        tcols = {r[1] for r in con.execute("pragma table_info(trades)").fetchall()}
+        has_pending = "pending" in tcols
+        if has_pending:
+            recent_rows = con.execute(
+                """select id, ts, time, slug, strategy, side, shares, avg_price, cost, fee,
+                          model_p, edge, secs_left, outcome, pnl, settled, settled_time, open_px, spot, pending
+                   from trades where {live} order by id desc limit 15""".format(live=live_sql(con))
+            ).fetchall()
         recent = []
         for r in recent_rows:
             tm = r["time"] or ""
@@ -597,6 +605,7 @@ def build_payload() -> dict:
                 "cost": r["cost"],
                 "pnl": r["pnl"],
                 "settled": int(r["settled"] or 0),
+                "pending": int(r["pending"] or 0) if has_pending else 0,
                 "outcome": r["outcome"],
                 "secs_left": r["secs_left"],
             })
@@ -748,6 +757,7 @@ def build_payload() -> dict:
         for r in con.execute(
             f"""select id, ts, time, slug, strategy, side, shares, avg_price, cost, fee,
                        model_p, edge, secs_left, outcome, pnl, settled, settled_time
+                       {", pending" if has_pending else ""}
                 from trades where {live} order by id desc limit 800"""
         ):
             lst = trades_by_strategy.setdefault(r["strategy"], [])
@@ -760,6 +770,7 @@ def build_payload() -> dict:
                 "slug": r["slug"], "strategy": r["strategy"], "side": r["side"],
                 "shares": r["shares"], "avg_price": r["avg_price"], "cost": r["cost"],
                 "fee": r["fee"], "pnl": r["pnl"], "settled": int(r["settled"] or 0),
+                "pending": int(r["pending"] or 0) if has_pending else 0,
                 "outcome": r["outcome"], "secs_left": r["secs_left"],
             })
 

@@ -1609,70 +1609,141 @@ class Bot:
         if curm and (not curm.tokens or curm.open_px is None) and now - curm.loaded > 3:
             curm.load(slow=True)
 
+    def _chainlink_end_tick(self, start):
+        """Chainlink (or fallback) tick at the window-end second, trying nearby seconds if needed."""
+        for off in (0, -1, 1, -2):
+            se = self.feed.series(start + WIN + off, start + WIN + off)
+            if se and se[0] is not None:
+                return se[0]
+        return None
+
+    def _apply_trade_results(self, slug, winner, pending):
+        """Write payout/pnl for this slug. pending=1 is a Chainlink provisional; 0 is official."""
+        stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        newly, corrected = [], []
+        # Unsettled rows (first application)
+        for tid, side, sh, cost, fe in self.c.execute(
+            f"select id,side,shares,cost,fee from trades where slug=? and settled=0 and {LIVE}", (slug,)
+        ).fetchall():
+            payout = sh if side == winner else 0.0
+            pnl = payout - cost - fe
+            self.c.execute(
+                "update trades set outcome=?, payout=?, pnl=?, settled=1, pending=?, settled_time=? where id=?",
+                (winner, payout, round(pnl, 5), 1 if pending else 0, stamp, tid),
+            )
+            newly.append((tid, side, pnl, pending))
+        if not pending:
+            # Confirm or correct provisionally settled rows
+            for tid, side, sh, cost, fe, prev_out, prev_pnl in self.c.execute(
+                f"select id,side,shares,cost,fee,outcome,pnl from trades where slug=? and settled=1 and coalesce(pending,0)=1 and {LIVE}",
+                (slug,),
+            ).fetchall():
+                payout = sh if side == winner else 0.0
+                pnl = payout - cost - fe
+                self.c.execute(
+                    "update trades set outcome=?, payout=?, pnl=?, settled=1, pending=0, settled_time=? where id=?",
+                    (winner, payout, round(pnl, 5), stamp, tid),
+                )
+                if prev_out != winner:
+                    corrected.append((tid, side, prev_out, winner, prev_pnl, pnl))
+                else:
+                    newly.append((tid, side, pnl, False))
+        return newly, corrected
+
     def settle(self):
         now = time.time()
         with self.dblock:
-            rows = self.c.execute(f"select distinct slug from trades where settled=0 and {LIVE}").fetchall()
+            rows = self.c.execute(f"select distinct slug from trades where (settled=0 or coalesce(pending,0)=1) and {LIVE}").fetchall()
             wins = self.c.execute("select slug,start from windows where official is null or (official is not null and check_ok is null)").fetchall()
             slugs = {r[0] for r in rows} | {w[0] for w in wins}
+        urgent = False
         for slug in slugs:
             start = int(slug.rsplit("-", 1)[1])
-            if now < start + WIN + 20: continue
-            if now < self._settle_next.get(slug, 0): continue
+            age = now - (start + WIN)
+            if age < 1:
+                if age > -5:
+                    urgent = True
+                continue
+            if age < 90:
+                urgent = True
+
+            tw = self.feed.series(start + WIN - TWAP_LB, start + WIN)
+            my_twap = sum(tw) / len(tw) if len(tw) > 30 else None
+            my_spot = self._chainlink_end_tick(start)
+
+            # Provisional result from Chainlink close vs open, as soon as the end tick exists.
+            with self.dblock:
+                existing = self.c.execute("select official,open_px,close_px,check_ok from windows where slug=?", (slug,)).fetchone()
+            prev_official = existing[0] if existing else None
+            prev_open = existing[1] if existing else None
+            if prev_open is None:
+                m = self.mkts.get(start)
+                if m is not None and getattr(m, "open_px", None) is not None:
+                    prev_open = m.open_px
+            if prev_official not in ("Up", "Down") and my_spot is not None and prev_open is not None:
+                prov = "Up" if my_spot >= prev_open else "Down"
+                with self.dblock:
+                    self.c.execute(
+                        "insert into windows(slug,start,open_px,my_twap,my_spot_end) values(?,?,?,?,?) "
+                        "on conflict(slug) do update set my_twap=coalesce(excluded.my_twap, windows.my_twap), "
+                        "my_spot_end=coalesce(excluded.my_spot_end, windows.my_spot_end), "
+                        "open_px=coalesce(windows.open_px, excluded.open_px)",
+                        (slug, start, prev_open, my_twap, my_spot),
+                    )
+                    newly, _ = self._apply_trade_results(slug, prov, pending=True)
+                    self.c.commit()
+                    write_csv(self.c)
+                for tid, side, pnl, _ in newly:
+                    log(f"PROVISIONAL #{tid} {slug} {side} -> {prov} (Chainlink close {my_spot} vs open {prev_open}) pnl ${pnl:+.2f} pending")
+
+            # Official Polymarket resolution: try immediately after the window ends (no 20s delay).
+            if now < self._settle_next.get(slug, 0):
+                continue
+            winner = close_px = open_px = None
             try:
                 ev = get(f"{GAMMA}/events", slug=slug, slow=True)
                 mk = ev[0]["markets"][0]
                 prices = [float(x) for x in json.loads(mk["outcomePrices"])]
                 outs = json.loads(mk["outcomes"])
-                if not (mk.get("closed") and sorted(prices) == [0.0, 1.0]):
-                    continue
-                winner = outs[prices.index(1.0)]
+                if mk.get("closed") and sorted(prices) == [0.0, 1.0]:
+                    winner = outs[prices.index(1.0)]
             except Exception as e:
                 n = self._settle_fail.get(slug, 0) + 1
                 self._settle_fail[slug] = n
-                self._settle_next[slug] = time.time() + min(60, 5 * 2 ** min(n, 4))
-                log("settle fetch err", slug, e); continue
-            close_px = open_px = None
+                delay = 2 if age < 45 else min(60, 5 * 2 ** min(n, 4))
+                self._settle_next[slug] = time.time() + delay
+                log("settle fetch err", slug, e)
+                continue
+            if winner not in ("Up", "Down"):
+                self._settle_next[slug] = time.time() + (2 if age < 45 else 10)
+                continue
             try:
                 d = get(CRYPTO_PRICE, symbol="BTC", eventStartTime=iso(start), variant="fiveminute", endDate=iso(start + WIN), slow=True)
                 close_px, open_px = d.get("closePrice"), d.get("openPrice")
             except Exception as e:
                 log("settle crypto-price err", slug, e)
-            tw = self.feed.series(start + WIN - TWAP_LB, start + WIN)
-            my_twap = sum(tw) / len(tw) if len(tw) > 30 else None
-            se = self.feed.series(start + WIN, start + WIN)
-            my_spot = se[0] if se else None
-            with self.dblock:
-                existing = self.c.execute("select official,open_px,close_px,check_ok from windows where slug=?", (slug,)).fetchone()
-            prev_official = existing[0] if existing else None
-            prev_open = existing[1] if existing else None
-            check = None
             ox = open_px if open_px is not None else prev_open
+            check = None
             if close_px and ox:
                 check = int((("Up" if close_px >= ox else "Down")) == winner)
-            elif my_spot is not None and ox is not None and now >= start + WIN + 90:
-                # API still missing after 90s: cross-check against our own Chainlink end tick
+            elif my_spot is not None and ox is not None:
                 check = int((("Up" if my_spot >= ox else "Down")) == winner)
                 log(f"cross-check {slug} used local chainlink ticks close={my_spot} open={ox} check={check}")
             with self.dblock:
                 self.c.execute("insert into windows(slug,start,open_px,close_px,official,my_twap,my_spot_end,check_ok) values(?,?,?,?,?,?,?,?) "
                                "on conflict(slug) do update set close_px=coalesce(excluded.close_px, windows.close_px), official=coalesce(excluded.official, windows.official), my_twap=coalesce(excluded.my_twap, windows.my_twap), my_spot_end=coalesce(excluded.my_spot_end, windows.my_spot_end), check_ok=coalesce(excluded.check_ok, windows.check_ok), open_px=coalesce(windows.open_px, excluded.open_px)",
                                (slug, start, open_px if open_px is not None else ox, close_px, winner, my_twap, my_spot, check))
-                newly = []
-                for tid, side, sh, cost, fe in self.c.execute(f"select id,side,shares,cost,fee from trades where slug=? and settled=0 and {LIVE}", (slug,)).fetchall():
-                    payout = sh if side == winner else 0.0
-                    pnl = payout - cost - fe
-                    self.c.execute("update trades set outcome=?, payout=?, pnl=?, settled=1, settled_time=? where id=?",
-                                   (winner, payout, round(pnl, 5), datetime.now().strftime("%Y-%m-%d %H:%M:%S"), tid))
-                    newly.append((tid, side, pnl))
+                newly, corrected = self._apply_trade_results(slug, winner, pending=False)
                 self.c.commit(); write_csv(self.c)
-            for tid, side, pnl in newly:
+            for tid, side, pnl, _ in newly:
                 log(f"SETTLE #{tid} {slug} {side} -> winner {winner} pnl ${pnl:+.2f}")
+            for tid, side, prev_out, new_out, prev_pnl, pnl in corrected:
+                log(f"SETTLE CORRECTED #{tid} {slug} {side} {prev_out} -> {new_out} pnl {prev_pnl:+.2f} -> {pnl:+.2f}")
             if prev_official is None or (check is not None and existing and existing[3] is None) or close_px is not None:
                 log(f"RESOLVED {slug} official={winner} close={close_px} open={open_px if open_px is not None else ox} my_twap60={my_twap} my_spot_end={my_spot} check={check}")
             if prev_official is None and winner in ("Up", "Down"):
-                for s in STRATS:
-                    fn = getattr(s, "on_window_settled", None)
+                for st in STRATS:
+                    fn = getattr(st, "on_window_settled", None)
                     if callable(fn):
                         try:
                             fn(slug, winner)
@@ -1680,6 +1751,8 @@ class Bot:
                             log("settle hook err", traceback.format_exc())
             self._settle_fail.pop(slug, None)
             self._settle_next.pop(slug, None)
+        return urgent
+
 
     def status(self):
         with self.dblock:
@@ -1736,10 +1809,12 @@ class Bot:
         while not self._stop.is_set():
             try:
                 self.prefetch()
-                self.settle()
+                urgent = self.settle()
             except Exception:
                 log("settle loop err", traceback.format_exc())
-            self._stop.wait(3 if first else 10)
+                urgent = False
+            # Poll every second for a short window after a 5-minute market ends, otherwise every 8s.
+            self._stop.wait(1 if (first or urgent) else 8)
             first = False
 
     def run_status_loop(self):

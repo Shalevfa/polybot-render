@@ -23,7 +23,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 TOKEN_PATH = os.path.join(ROOT, ".vercel_push_token")
 LOCAL = "http://127.0.0.1:%s/api/live" % os.environ.get("POLYBOT_DASH_PORT", "8765")
 SITE = os.environ.get("POLYBOT_SITE", "https://polybot-btc5m.vercel.app")
-INTERVAL = float(os.environ.get("POLYBOT_PUSH_INTERVAL", "6"))
+INTERVAL = float(os.environ.get("POLYBOT_PUSH_INTERVAL", "2"))
 MAX_SERIES = 120
 
 

@@ -205,6 +205,8 @@
   .tag.win { color: var(--green); }
   .tag.loss { color: var(--red); }
   .tag.open { color: var(--gold); }
+  .tag.pending { color: var(--gold); }
+  tr.pending { background: rgba(245,197,66,.07); }
   .scroller { overflow: auto; max-height: 240px; min-height: 120px; }
   .scroller::-webkit-scrollbar { width: 6px; height: 6px; }
   .scroller::-webkit-scrollbar-thumb { background: #2a3142; border-radius: 4px; }
@@ -527,6 +529,7 @@ function renderTrades(rows) {
     if (r.settled) {
       if ((r.pnl || 0) >= 0) { tag = "ניצחון"; cls = "win"; tagCls = "win"; }
       else { tag = "הפסד"; cls = "loss"; tagCls = "loss"; }
+      if (r.pending) { tag = "ממתין לאישור"; cls = "pending"; tagCls = "pending"; }
       pnl = fmtSigned(r.pnl);
     }
     const key = r.id + ":" + r.settled + ":" + (r.pnl ?? "");
@@ -634,8 +637,49 @@ async function tick() {
     }
   }
 }
-tick();
-setInterval(tick, 1000);
+
+const STREAM_URL = "https://polybot-btc5m.onrender.com/api/stream";
+let liveEs = null, livePoll = null, lastStreamAt = 0, streamOk = false;
+function startLivePoll() {
+  if (livePoll) return;
+  tick();
+  livePoll = setInterval(tick, 1000);
+}
+function stopLivePoll() {
+  if (livePoll) { clearInterval(livePoll); livePoll = null; }
+}
+function startLiveStream() {
+  if (liveEs) { try { liveEs.close(); } catch (e) {} liveEs = null; }
+  try { liveEs = new EventSource(STREAM_URL); }
+  catch (e) { startLivePoll(); return; }
+  liveEs.onmessage = (ev) => {
+    try {
+      const d = unwrapPayload(JSON.parse(ev.data));
+      if (!d || (!d.strategies && !d.window)) return;
+      lastStreamAt = Date.now();
+      streamOk = true;
+      apply(d);
+      stopLivePoll();
+    } catch (e) {}
+  };
+  liveEs.onerror = () => {
+    streamOk = false;
+    try { if (liveEs) liveEs.close(); } catch (e) {}
+    liveEs = null;
+    startLivePoll();
+    if (window._streamRetry) return;
+    window._streamRetry = setTimeout(() => { window._streamRetry = null; startLiveStream(); }, 2500);
+  };
+}
+function watchLive() {
+  startLivePoll();
+  startLiveStream();
+  setInterval(() => {
+    if (streamOk && Date.now() - lastStreamAt > 4000) startLivePoll();
+  }, 1000);
+}
+
+watchLive();
 window.addEventListener("resize", () => { /* next tick redraws */ });
 </script>
 </body>

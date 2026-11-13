@@ -284,6 +284,8 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
         conn.execute("alter table trades add column archive_reason text")
     if cols and "exit_reason" not in cols:
         conn.execute("alter table trades add column exit_reason text")
+    if cols and "pending" not in cols:
+        conn.execute("alter table trades add column pending integer not null default 0")
     conn.commit()
 
 
