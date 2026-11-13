@@ -2,7 +2,7 @@
 <html lang="he" dir="rtl">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=1280, height=800, initial-scale=1"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
 <title>BTC 5 דק' · לייב</title>
 <style>
   :root {
@@ -148,7 +148,7 @@
   .team-wrap h2 { font-size: 12px; color: var(--muted); margin: 0 2px 6px; }
   .team {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
     gap: 8px;
   }
   .bot {
@@ -209,6 +209,24 @@
   .scroller::-webkit-scrollbar { width: 6px; height: 6px; }
   .scroller::-webkit-scrollbar-thumb { background: #2a3142; border-radius: 4px; }
   #err { color: var(--red); font-size: 12px; min-height: 0; }
+
+  @media (max-width: 840px) {
+    body { padding: 8px 8px 20px; }
+    header {
+      grid-template-columns: 1fr;
+      justify-items: stretch;
+      min-height: 0;
+      gap: 10px;
+      padding: 10px 12px;
+    }
+    .prices { flex-wrap: wrap; gap: 12px 16px; justify-content: flex-start; }
+    .metric .val { font-size: 26px; }
+    .metric .val.sm { font-size: 20px; }
+    .clock-box, .clock-box .lbl, .clock-box .now { text-align: right; }
+    .clock-box .cd { font-size: 40px; }
+    .mid { grid-template-columns: 1fr; }
+    .team { grid-template-columns: 1fr; }
+  }
 </style>
 </head>
 <body>
@@ -592,11 +610,18 @@ function apply(d) {
 }
 
 let fail = 0;
+function unwrapPayload(d) {
+  if (d && d.data && typeof d.data === "object" && (d.data.strategies || d.data.window || d.data.series)) {
+    return d.data;
+  }
+  return d;
+}
 async function tick() {
   try {
-    const r = await fetch("/api/live", { cache: "no-store" });
+    let r = await fetch("/api/data", { cache: "no-store" });
+    if (!r.ok) r = await fetch("/api/live", { cache: "no-store" });
     if (!r.ok) throw new Error("http " + r.status);
-    const d = await r.json();
+    const d = unwrapPayload(await r.json());
     fail = 0;
     apply(d);
   } catch (e) {
