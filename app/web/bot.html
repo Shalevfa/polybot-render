@@ -399,6 +399,53 @@ function renderGenetic(s) {
   }).join("") || `<tr><td colspan="4">אין עדיין תוצאות צל</td></tr>`;
 }
 
+let settingsDirty = false;
+let pendingSaved = null;
+let pendingUntil = 0;
+
+function isEditingSettings() {
+  const ae = document.activeElement;
+  if (!ae || ae === document.body || ae === document.documentElement) return false;
+  if (ae.closest && ae.closest("#fields")) return true;
+  if (["swEnabled", "swAuto", "swRisk", "swAlerts", "buyAmt"].includes(ae.id)) return true;
+  if (ae.closest && ae.closest("dialog")) return true;
+  return false;
+}
+
+function settingsRoughlyEqual(a, b) {
+  if (!a || !b) return false;
+  const keys = new Set(Object.keys(a).concat(Object.keys(b)));
+  for (const k of keys) {
+    const va = a[k], vb = b[k];
+    if (k === "enabled" || k === "auto_trading" || k === "risk_management" || k === "alerts") {
+      if (Boolean(va) !== Boolean(vb)) return false;
+      continue;
+    }
+    if (va == null && vb == null) continue;
+    if (typeof va === "number" || typeof vb === "number") {
+      if (Number(va) !== Number(vb)) return false;
+    } else if (String(va) !== String(vb)) return false;
+  }
+  return true;
+}
+
+function shouldHoldForm() {
+  if (isEditingSettings() || settingsDirty) return true;
+  if (pendingSaved && Date.now() < pendingUntil) return true;
+  return false;
+}
+
+document.addEventListener("input", (e) => {
+  const t = e.target;
+  if (t && t.closest && t.closest("#fields")) settingsDirty = true;
+});
+document.addEventListener("change", (e) => {
+  const t = e.target;
+  if (!t) return;
+  if (t.closest && t.closest("#fields")) settingsDirty = true;
+  if (["swEnabled", "swAuto", "swRisk", "swAlerts"].includes(t.id)) settingsDirty = true;
+});
+
 function applyBot(d) {
   const strats = d.strategies || [];
   const s = strats.find(x => x.name === NAME);
@@ -417,15 +464,20 @@ function applyBot(d) {
   const sp = document.getElementById("statePill");
   sp.className = "pill " + (s.state || "");
   sp.textContent = s.state_he || s.state || "";
-  document.getElementById("swEnabled").checked = s.enabled !== false;
-  document.getElementById("swAuto").checked = s.auto_trading != null ? !!s.auto_trading : (NAME !== "manual");
-  document.getElementById("swRisk").checked = !!s.settings && !!s.settings.risk_management;
-  document.getElementById("swAlerts").checked = !!s.settings && !!s.settings.alerts;
   document.getElementById("manualCard").hidden = NAME !== "manual";
   document.getElementById("geneticCard").hidden = NAME !== "genetic";
   if (NAME === "genetic") renderGenetic(s);
   renderStats(s);
-  if (s.schema && s.schema.length) renderFields(s.schema, s.settings || s.defaults || {});
+  if (pendingSaved && (settingsRoughlyEqual(s.settings, pendingSaved) || Date.now() >= pendingUntil)) {
+    pendingSaved = null;
+  }
+  if (!shouldHoldForm()) {
+    document.getElementById("swEnabled").checked = s.enabled !== false;
+    document.getElementById("swAuto").checked = s.auto_trading != null ? !!s.auto_trading : (NAME !== "manual");
+    document.getElementById("swRisk").checked = !!s.settings && !!s.settings.risk_management;
+    document.getElementById("swAlerts").checked = !!s.settings && !!s.settings.alerts;
+    if (s.schema && s.schema.length) renderFields(s.schema, s.settings || s.defaults || {});
+  }
   const rows = (d.trades_by_strategy && d.trades_by_strategy[NAME]) || [];
   renderTrades(rows);
 }
@@ -461,12 +513,18 @@ async function withAuth(fn, msgId) {
 
 document.getElementById("swEnabled").addEventListener("change", ev => withAuth(async () => {
   await admin({ op: "toggle", name: NAME, enabled: ev.target.checked });
+  settingsDirty = false;
+  pendingSaved = Object.assign({}, (current && current.settings) || {}, { enabled: ev.target.checked });
+  pendingUntil = Date.now() + 10000;
   message("toggleMsg", ev.target.checked ? "הבוט הופעל. ייכנס לתוקף תוך שניות." : "הבוט כובה לעסקאות חדשות.", true);
   waitAndRefresh();
 }, "toggleMsg"));
 
 document.getElementById("swAuto").addEventListener("change", ev => withAuth(async () => {
   await admin({ op: "toggle", name: NAME, auto_trading: ev.target.checked });
+  settingsDirty = false;
+  pendingSaved = Object.assign({}, (current && current.settings) || {}, { auto_trading: ev.target.checked });
+  pendingUntil = Date.now() + 10000;
   message("toggleMsg", ev.target.checked ? "מסחר אוטומטי הופעל." : "מסחר אוטומטי כובה (מושהה).", true);
   waitAndRefresh();
 }, "toggleMsg"));
@@ -475,12 +533,18 @@ document.getElementById("btnSave").addEventListener("click", () => withAuth(asyn
   if (!current) return;
   const settings = collectSettings(current.schema, current.settings || current.defaults);
   await admin({ op: "save", name: NAME, settings });
+  settingsDirty = false;
+  pendingSaved = settings;
+  pendingUntil = Date.now() + 10000;
   message("saveMsg", "ההגדרות נשמרו וייכנסו לתוקף מיד. הן נשמרות גם אחרי ריענון והפעלה מחדש של השרת.", true);
   waitAndRefresh();
 }, "saveMsg"));
 
 document.getElementById("btnResetDef").addEventListener("click", () => withAuth(async () => {
   await admin({ op: "reset_defaults", name: NAME });
+  settingsDirty = false;
+  pendingSaved = null;
+  pendingUntil = 0;
   message("saveMsg", "ההגדרות אופסו לברירת המחדל המקורית.", true);
   waitAndRefresh();
 }, "saveMsg"));
