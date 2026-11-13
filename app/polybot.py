@@ -607,6 +607,14 @@ def book(token):
 
 def fee(shares, p): return round(shares * FEE_RATE * p * (1 - p), 5)
 
+def trade_estimates(shares, cost, fe):
+    """Purchase-time PnL if the trade wins or loses. Fixed at fill; never revised later."""
+    sh = float(shares or 0)
+    cost = float(cost or 0)
+    fe = float(fe or 0)
+    return round(sh - cost - fe, 5), round(-(cost + fe), 5)
+
+
 def simulate_buy(asks, budget, max_price, min_shares=MIN_SHARES):
     """walk ask levels up to max_price, spending <= budget incl. fees. returns shares, cost, fee, avg"""
     sh = cost = fe = 0.0
@@ -656,7 +664,7 @@ def db():
     bot_settings.ensure_schema(c)
     c.commit(); return c
 
-CSV_FIELDS = ["id", "time", "slug", "strategy", "side", "shares", "avg_price", "cost", "fee", "model_p", "edge", "spot", "open_px", "secs_left", "outcome", "payout", "pnl", "settled_time"]
+CSV_FIELDS = ["id", "time", "slug", "strategy", "side", "shares", "avg_price", "cost", "fee", "model_p", "edge", "spot", "open_px", "secs_left", "outcome", "payout", "pnl", "est_profit", "est_loss", "settled_time"]
 def write_csv(c):
     rows = c.execute(f"select {','.join(CSV_FIELDS)} from trades where {LIVE} order by id").fetchall()
     with open(CSV, "w", newline="") as f:
@@ -1262,12 +1270,13 @@ class Bot:
         mp = p_up(self.feed, m.start, m.open_px) or {}
         left = m.end - now
         with self.dblock:
-            self.c.execute("""insert into trades(ts,time,slug,strategy,side,shares,avg_price,cost,fee,model_p,edge,spot,open_px,secs_left)
-                values(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (
+            est_p, est_l = trade_estimates(fill["shares"], fill["cost"], fill["fee"])
+            self.c.execute("""insert into trades(ts,time,slug,strategy,side,shares,avg_price,cost,fee,model_p,edge,spot,open_px,secs_left,est_profit,est_loss)
+                values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (
                 now, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), m.slug, "manual", side,
                 fill["shares"], round(fill["avg"], 4), fill["cost"], fill["fee"],
                 round(float(mp["p"]), 4) if mp.get("p") is not None else None,
-                None, mp.get("spot"), m.open_px, left))
+                None, mp.get("spot"), m.open_px, left, est_p, est_l))
             self.c.commit(); write_csv(self.c)
         log(f"TRADE manual {m.slug} {side} {fill['shares']}sh @{fill['avg']:.3f} cost ${fill['cost']:.2f} fee ${fill['fee']:.3f} left={left:.0f}s (manual paper buy)")
         self._alert("manual", f"bought {side} {fill['shares']}sh cost ${fill['cost']:.2f}")
@@ -1482,9 +1491,10 @@ class Bot:
             self.dec(m, s, "skip", f"no fill >= {MIN_SHARES} sh under {maxp:.2f} side={side}"); return
         now = time.time()
         with self.dblock:
-            self.c.execute("""insert into trades(ts,time,slug,strategy,side,shares,avg_price,cost,fee,model_p,edge,spot,open_px,secs_left)
-                values(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (now, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), m.slug, s.name, side,
-                fill["shares"], round(fill["avg"], 4), fill["cost"], fill["fee"], round(prob, 4), round(edge, 4), mp["spot"], m.open_px, left))
+            est_p, est_l = trade_estimates(fill["shares"], fill["cost"], fill["fee"])
+            self.c.execute("""insert into trades(ts,time,slug,strategy,side,shares,avg_price,cost,fee,model_p,edge,spot,open_px,secs_left,est_profit,est_loss)
+                values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (now, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), m.slug, s.name, side,
+                fill["shares"], round(fill["avg"], 4), fill["cost"], fill["fee"], round(prob, 4), round(edge, 4), mp["spot"], m.open_px, left, est_p, est_l))
             self.c.commit(); write_csv(self.c)
         s.done.add(m.slug)
         on_fill = getattr(s, "on_fill", None)

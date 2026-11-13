@@ -39,6 +39,38 @@ sys.path.insert(0, ROOT)
 import bot_settings
 from bot_settings import LIVE
 
+def estimates_of(row) -> tuple:
+    """Purchase-time PnL if the trade wins or loses. Prefer stored values; otherwise derive like the engine."""
+    def _get(k):
+        if isinstance(row, dict):
+            return row.get(k)
+        try:
+            return row[k]
+        except Exception:
+            return None
+    ep, el = _get("est_profit"), _get("est_loss")
+    sh, cost, fe, px = _get("shares"), _get("cost"), _get("fee"), _get("avg_price")
+    if fe is None and sh is not None and px is not None:
+        try:
+            fe = round(float(sh) * 0.07 * float(px) * (1.0 - float(px)), 5)
+        except Exception:
+            fe = 0.0
+    if ep is None and sh is not None and cost is not None:
+        ep = round(float(sh) - float(cost) - float(fe or 0), 5)
+    if el is None and cost is not None:
+        el = round(-(float(cost) + float(fe or 0)), 5)
+    return ep, el
+
+def fmt_estimate(ep, el) -> str:
+    bits = []
+    if ep is not None:
+        sign = "+" if ep >= 0 else "-"
+        bits.append(f"רווח משוער {sign}${abs(ep):.2f}")
+    if el is not None:
+        sign = "+" if el >= 0 else "-"
+        bits.append(f"הפסד אם מפסיד {sign}${abs(el):.2f}")
+    return " · ".join(bits)
+
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("POLYBOT_DASH_PORT", "8765"))
 WIN = 300
@@ -584,11 +616,14 @@ def build_payload() -> dict:
         ).fetchall()
         tcols = {r[1] for r in con.execute("pragma table_info(trades)").fetchall()}
         has_pending = "pending" in tcols
-        if has_pending:
+        has_est = "est_profit" in tcols
+        extra_recent = (", pending" if has_pending else "") + (", est_profit, est_loss" if has_est else "")
+        if extra_recent:
             recent_rows = con.execute(
                 """select id, ts, time, slug, strategy, side, shares, avg_price, cost, fee,
-                          model_p, edge, secs_left, outcome, pnl, settled, settled_time, open_px, spot, pending
-                   from trades where {live} order by id desc limit 15""".format(live=live_sql(con))
+                          model_p, edge, secs_left, outcome, pnl, settled, settled_time, open_px, spot
+                          {extra}
+                   from trades where {live} order by id desc limit 15""".format(live=live_sql(con), extra=extra_recent)
             ).fetchall()
         recent = []
         for r in recent_rows:
@@ -606,13 +641,17 @@ def build_payload() -> dict:
                 "pnl": r["pnl"],
                 "settled": int(r["settled"] or 0),
                 "pending": int(r["pending"] or 0) if has_pending else 0,
+                "est_profit": estimates_of(r)[0],
+                "est_loss": estimates_of(r)[1],
                 "outcome": r["outcome"],
                 "secs_left": r["secs_left"],
             })
 
         open_rows = con.execute(
-            """select id, strategy, side, shares, avg_price, cost, model_p, secs_left, ts, time
-               from trades where slug=? and settled=0 and {live} order by id""".format(live=live_sql(con)),
+            """select id, strategy, side, shares, avg_price, cost, fee, model_p, secs_left, ts, time
+                      {est}
+               from trades where slug=? and settled=0 and {live} order by id""".format(
+                live=live_sql(con), est=", est_profit, est_loss" if has_est else ""),
             (slug,),
         ).fetchall()
         open_by = {}
@@ -668,7 +707,7 @@ def build_payload() -> dict:
             if not bought:
                 # trade this slug even if somehow settled
                 tr = con.execute(
-                    f"select id, side, shares, avg_price, cost from trades where slug=? and strategy=? and {live_sql(con)} order by id desc limit 1",
+                    f"select id, side, shares, avg_price, cost, fee{', est_profit, est_loss' if has_est else ''} from trades where slug=? and strategy=? and {live_sql(con)} order by id desc limit 1",
                     (slug, name),
                 ).fetchone()
                 if tr:
@@ -679,7 +718,11 @@ def build_payload() -> dict:
             if bought:
                 bits = []
                 for o in bought:
-                    bits.append(f"קנתה {o['side']} ב-{o['avg_price']*100:.0f}¢ · ${o['cost']:.2f}")
+                    est = fmt_estimate(*estimates_of(o))
+                    line = f"קנתה {o['side']} ב-{o['avg_price']*100:.0f}¢ · ${o['cost']:.2f}"
+                    if est:
+                        line += " · " + est
+                    bits.append(line)
                 state = "bought"
                 state_he = " · ".join(bits)
                 if run_mode == "off":
@@ -744,6 +787,9 @@ def build_payload() -> dict:
                         "avg_price": o["avg_price"],
                         "cost": o["cost"],
                         "shares": o["shares"],
+                        "fee": (o.get("fee") if isinstance(o, dict) else (o["fee"] if "fee" in o.keys() else None)),
+                        "est_profit": estimates_of(o)[0],
+                        "est_loss": estimates_of(o)[1],
                     }
                     for o in opens
                 ],
@@ -758,6 +804,7 @@ def build_payload() -> dict:
             f"""select id, ts, time, slug, strategy, side, shares, avg_price, cost, fee,
                        model_p, edge, secs_left, outcome, pnl, settled, settled_time
                        {", pending" if has_pending else ""}
+                       {", est_profit, est_loss" if has_est else ""}
                 from trades where {live} order by id desc limit 800"""
         ):
             lst = trades_by_strategy.setdefault(r["strategy"], [])
@@ -771,6 +818,8 @@ def build_payload() -> dict:
                 "shares": r["shares"], "avg_price": r["avg_price"], "cost": r["cost"],
                 "fee": r["fee"], "pnl": r["pnl"], "settled": int(r["settled"] or 0),
                 "pending": int(r["pending"] or 0) if has_pending else 0,
+                "est_profit": estimates_of(r)[0],
+                "est_loss": estimates_of(r)[1],
                 "outcome": r["outcome"], "secs_left": r["secs_left"],
             })
 

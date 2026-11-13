@@ -286,6 +286,17 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
         conn.execute("alter table trades add column exit_reason text")
     if cols and "pending" not in cols:
         conn.execute("alter table trades add column pending integer not null default 0")
+    if cols and "est_profit" not in cols:
+        conn.execute("alter table trades add column est_profit real")
+    if cols and "est_loss" not in cols:
+        conn.execute("alter table trades add column est_loss real")
+    # Freeze purchase-time estimates on any row that does not already have them.
+    conn.execute(
+        """update trades set
+             est_profit = round(shares - cost - coalesce(fee, round(shares * 0.07 * avg_price * (1.0 - avg_price), 5), 0), 5),
+             est_loss = round(-(cost + coalesce(fee, round(shares * 0.07 * avg_price * (1.0 - avg_price), 5), 0)), 5)
+           where est_profit is null and shares is not null and cost is not null"""
+    )
     conn.commit()
 
 

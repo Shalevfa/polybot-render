@@ -36,7 +36,11 @@
   .pill.active { background: var(--green-dim); color: var(--green); }
   .pill.off { background: var(--red-dim); color: var(--red); }
   .pill.paused { background: rgba(245,197,66,.16); color: var(--gold); }
-  .pill.bought { background: var(--green-dim); color: var(--green); }
+  .pill.bought {
+    background: var(--green-dim); color: var(--green);
+    white-space: normal; line-height: 1.35; max-width: 100%;
+    border-radius: 10px;
+  }
   .card {
     background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
     padding: 14px 16px; margin-bottom: 12px;
@@ -195,7 +199,7 @@
     <h2>ספר העסקאות של הבוט הזה בלבד</h2>
     <div style="overflow:auto">
       <table>
-        <thead><tr><th>שעה</th><th>סיבוב</th><th>צד</th><th>מחיר</th><th>סכום</th><th>תוצאה</th><th>רווח</th></tr></thead>
+        <thead><tr><th>שעה</th><th>סיבוב</th><th>צד</th><th>מחיר</th><th>סכום</th><th>תוצאה</th><th>משוער</th><th>רווח</th></tr></thead>
         <tbody id="trades"></tbody>
       </table>
     </div>
@@ -347,9 +351,18 @@ function collectSettings(schema, base) {
   return out;
 }
 
+
+function fmtEst(r) {
+  const ep = r && r.est_profit, el = r && r.est_loss;
+  if (ep == null && el == null) return "—";
+  const one = (n) => (n >= 0 ? "+" : "-") + "$" + Math.abs(Number(n)).toFixed(2);
+  if (ep == null) return "הפסד " + one(el);
+  if (el == null) return one(ep);
+  return one(ep) + " / " + one(el);
+}
 function renderTrades(rows) {
   const tb = document.getElementById("trades");
-  if (!rows || !rows.length) { tb.innerHTML = `<tr><td colspan="7" style="color:#8b93a7">אין עסקאות (לא בארכיון)</td></tr>`; return; }
+  if (!rows || !rows.length) { tb.innerHTML = `<tr><td colspan="8" style="color:#8b93a7">אין עסקאות (לא בארכיון)</td></tr>`; return; }
   tb.innerHTML = rows.map(r => {
     let tag = "פתוחה", tagCls = "open", pnl = "—";
     if (r.settled) {
@@ -367,6 +380,7 @@ function renderTrades(rows) {
       <td class="mono">${r.avg_price != null ? Math.round(r.avg_price * 100) + "¢" : "—"}</td>
       <td class="mono">${fmtUsd(r.cost)}$</td>
       <td><span class="tag ${tagCls}">${tag}</span></td>
+      <td class="mono">${fmtEst(r)}</td>
       <td class="mono ${tagCls}">${pnl}</td>
     </tr>`;
   }).join("");

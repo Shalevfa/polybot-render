@@ -173,7 +173,12 @@
   }
   .st-pill.waiting { background: #1b2130; color: var(--muted); }
   .st-pill.watching { background: rgba(91,140,255,.18); color: #9ec1ff; animation: pulse 1.6s infinite; }
-  .st-pill.bought { background: var(--green-dim); color: var(--green); }
+  .st-pill.bought {
+    background: var(--green-dim); color: var(--green);
+    white-space: normal; overflow: visible; text-overflow: unset;
+    max-width: min(78%, 280px); line-height: 1.35; border-radius: 10px;
+    text-align: right;
+  }
   .st-pill.skipped { background: rgba(251,146,60,.16); color: var(--orange); }
   .bot .doc { font-size: 11px; color: var(--muted); line-height: 1.35; min-height: 28px; }
   .bot .nums { display: flex; gap: 12px; margin-top: auto; align-items: baseline; }
@@ -228,6 +233,8 @@
     .clock-box .cd { font-size: 40px; }
     .mid { grid-template-columns: 1fr; }
     .team { grid-template-columns: 1fr; }
+    .bot .row1 { align-items: flex-start; }
+    .st-pill, .st-pill.bought { max-width: 100%; white-space: normal; overflow: visible; text-overflow: unset; }
   }
 </style>
 </head>
@@ -300,7 +307,7 @@
       <table>
         <thead>
           <tr>
-            <th>שעה</th><th>אסטרטגיה</th><th>צד</th><th>מחיר</th><th>סכום</th><th>תוצאה</th><th>רווח</th>
+            <th>שעה</th><th>אסטרטגיה</th><th>צד</th><th>מחיר</th><th>סכום</th><th>תוצאה</th><th>משוער</th><th>רווח</th>
           </tr>
         </thead>
         <tbody id="trades"></tbody>
@@ -519,6 +526,15 @@ function renderTeam(strats) {
   }).join("");
 }
 
+
+function fmtEst(r) {
+  const ep = r && r.est_profit, el = r && r.est_loss;
+  if (ep == null && el == null) return "—";
+  const one = (n) => (n >= 0 ? "+" : "-") + "$" + Math.abs(Number(n)).toFixed(2);
+  if (ep == null) return "הפסד " + one(el);
+  if (el == null) return one(ep);
+  return one(ep) + " / " + one(el);
+}
 function renderTrades(rows) {
   const tb = document.getElementById("trades");
   const sig = (rows || []).map(r => r.id + ":" + r.settled + ":" + (r.pnl ?? "")).join("|");
@@ -542,6 +558,7 @@ function renderTrades(rows) {
       <td class="mono">${Math.round((r.avg_price || 0) * 100)}¢</td>
       <td class="mono">${fmtUsd(r.cost)}$</td>
       <td><span class="tag ${tagCls}">${tag}</span></td>
+      <td class="mono">${fmtEst(r)}</td>
       <td class="mono ${tagCls}">${pnl}</td>
     </tr>`;
   }).join("");
