@@ -15,7 +15,7 @@ from typing import Any
 from uuid import uuid4
 
 import bot_settings
-from bot_settings import RANGES
+from bot_settings import RANGES, ranges_for, GENETIC_MIN_CHAMPION_TRADES
 
 # Lazy import of polybot to avoid a circular import (polybot loads this module).
 def _pb():
@@ -28,6 +28,8 @@ GENE_KEYS = (
 )
 
 STATE_VERSION = 1
+HARD_CAP = 10.0
+LIVE_MIN_STAKE = 3.0
 
 
 def default_genome() -> dict[str, float]:
@@ -38,7 +40,9 @@ def default_genome() -> dict[str, float]:
 def clamp_genome(g: dict[str, Any]) -> dict[str, float]:
     out = {}
     for k in GENE_KEYS:
-        lo, hi = RANGES[k]
+        lo, hi = ranges_for("genetic", k)
+        if lo is None or hi is None:
+            lo, hi = RANGES[k]
         try:
             v = float(g.get(k, default_genome()[k]))
         except (TypeError, ValueError):
@@ -48,8 +52,15 @@ def clamp_genome(g: dict[str, Any]) -> dict[str, float]:
         out[k] = min(hi, max(lo, v))
     if out["left_lo"] > out["left_hi"]:
         out["left_lo"], out["left_hi"] = out["left_hi"], out["left_lo"]
+        # re-clamp after a swap so both stay in genetic bounds
+        lo, hi = ranges_for("genetic", "left_lo")
+        out["left_lo"] = min(hi, max(lo, out["left_lo"]))
+        lo, hi = ranges_for("genetic", "left_hi")
+        out["left_hi"] = min(hi, max(lo, out["left_hi"]))
     if out["min_ask"] > out["max_ask"]:
         out["min_ask"], out["max_ask"] = out["max_ask"], out["min_ask"]
+        lo, hi = ranges_for("genetic", "min_ask")
+        out["min_ask"] = min(hi, max(lo, out["min_ask"]))
     return out
 
 
@@ -62,18 +73,34 @@ def genetic_pick(genome: dict[str, float], mp: dict, books: dict, left: float):
     return pb.pick(s, mp, books, genome["w"], genome["min_ask"], genome["max_ask"])
 
 
-def shadow_stake_and_fill(genome: dict[str, float], bank: float, side: str, prob: float,
-                          a: float, books: dict):
+def _too_expensive(engine, a: float) -> bool:
+    if not engine or not getattr(engine, "max_price_on", False):
+        return False
+    pb = _pb()
+    return pb.Strategy.eff(a) > float(getattr(engine, "max_price", 0.48) or 0.48)
+
+
+def size_stake(genome: dict[str, float], bank: float, prob: float, a: float) -> float:
+    """Live and shadow use the same sizing: min(cap, cash_frac*bank, kelly-sized, $10), $3 floor."""
     pb = _pb()
     q = pb.Strategy.eff(a)
     if q <= 0 or q >= 1:
-        return None
+        return 0.0
     b = (1 - q) / q
     kf = max(0.0, (prob * b - (1 - prob)) / b)
-    cap = min(genome["cap"], genome["cash_frac_cap"] * bank)
-    stake = min(cap, genome["kelly"] * kf * bank, bank)
-    if 0 < stake < genome["min_stake"]:
-        stake = min(genome["min_stake"], bank)
+    cap = min(float(genome.get("cap") or HARD_CAP), HARD_CAP, float(genome.get("cash_frac_cap") or 0) * bank)
+    kelly = float(genome.get("kelly") or 0)
+    stake = min(cap, kelly * kf * bank, bank, HARD_CAP)
+    min_stake = LIVE_MIN_STAKE
+    if 0 < stake < min_stake:
+        stake = min(min_stake, bank, HARD_CAP)
+    return float(stake)
+
+
+def shadow_stake_and_fill(genome: dict[str, float], bank: float, side: str, prob: float,
+                          a: float, books: dict):
+    pb = _pb()
+    stake = size_stake(genome, bank, prob, a)
     if stake < 1.0:
         return None
     maxp = min(0.97, prob - genome["min_edge"] / 2, a + 0.03)
@@ -100,11 +127,13 @@ class GeneticEngine:
         self.last_slug: str | None = None
         self.cfg = {
             "pop_size": 10,
-            "evolve_every": 12,
+            "evolve_every": 40,
             "mutation_rate": 0.20,
         }
         self.enabled = True
         self.auto_trading = True
+        self.max_price_on = False
+        self.max_price = 0.48
         self.rng = random.Random()
         self._dirty = False
 
@@ -112,12 +141,20 @@ class GeneticEngine:
         s = settings or {}
         self.enabled = bool(s.get("enabled", True))
         self.auto_trading = bool(s.get("auto_trading", True))
+        self.max_price_on = bool(s.get("max_price_on", False))
+        try:
+            self.max_price = float(s.get("max_price") if s.get("max_price") is not None else 0.48)
+        except (TypeError, ValueError):
+            self.max_price = 0.48
         try:
             self.cfg["pop_size"] = int(max(4, min(30, float(s.get("pop_size", 10)))))
         except (TypeError, ValueError):
             pass
         try:
-            self.cfg["evolve_every"] = int(max(4, min(100, float(s.get("evolve_every", 12)))))
+            ev = float(s.get("evolve_every", 40))
+            if ev == 12:
+                ev = 40  # old shipped default; new policy is every 40 rounds
+            self.cfg["evolve_every"] = int(max(4, min(100, ev)))
         except (TypeError, ValueError):
             pass
         try:
@@ -170,7 +207,9 @@ class GeneticEngine:
         out = dict(g)
         for k in GENE_KEYS:
             if self.rng.random() < rate:
-                lo, hi = RANGES[k]
+                lo, hi = ranges_for("genetic", k)
+                if lo is None or hi is None:
+                    lo, hi = RANGES[k]
                 out[k] = out[k] + self.rng.gauss(0, 0.18 * (hi - lo))
         return clamp_genome(out)
 
@@ -194,6 +233,8 @@ class GeneticEngine:
             if not ch:
                 continue
             side, prob, edge, a = ch
+            if _too_expensive(self, a):
+                continue
             fill = shadow_stake_and_fill(ind["genome"], ind["bank"], side, prob, a, books)
             if not fill:
                 continue
@@ -220,6 +261,9 @@ class GeneticEngine:
             self.last_decision, self.last_reason = "WAIT", why or "no edge"
             return None, self.last_reason
         side, prob, edge, a = ch
+        if _too_expensive(self, a):
+            self.last_decision, self.last_reason = "WAIT", "max_price"
+            return None, self.last_reason
         self.last_decision = "BUY_UP" if side == "Up" else "BUY_DOWN"
         self.last_reason = f"{side} edge={edge:.3f} ask={a:.3f}"
         return ch, None
@@ -260,7 +304,13 @@ class GeneticEngine:
     def pick_champion(self):
         if not self.pop:
             return
-        ranked = sorted(self.pop, key=_fitness, reverse=True)
+        eligible = [p for p in self.pop if int(p.get("trades") or 0) >= GENETIC_MIN_CHAMPION_TRADES]
+        if not eligible:
+            # Not enough shadow trades yet — keep the current champion if it still exists.
+            if self.champion_id and any(p["id"] == self.champion_id for p in self.pop):
+                return
+            return
+        ranked = sorted(eligible, key=_fitness, reverse=True)
         self.champion_id = ranked[0]["id"]
 
     def evolve(self):
@@ -303,15 +353,33 @@ class GeneticEngine:
                 "genome": {k: round(float(v), 4) for k, v in ind["genome"].items()},
             })
         best = next((r for r in rows if r["champion"]), rows[0] if rows else None)
+        ch = self.champion()
+        g = (ch or {}).get("genome") or default_genome()
+        live_params = {
+            "min_ask": round(float(g["min_ask"]), 4),
+            "max_ask": round(float(g["max_ask"]), 4),
+            "left_lo": round(float(g["left_lo"]), 2),
+            "left_hi": round(float(g["left_hi"]), 2),
+            "min_edge": round(float(g["min_edge"]), 4),
+            "kelly": round(float(g["kelly"]), 4),
+            "cap": round(min(float(g["cap"]), HARD_CAP), 2),
+            "cash_frac_cap": round(float(g["cash_frac_cap"]), 4),
+            "min_stake": LIVE_MIN_STAKE,
+            "hard_cap": HARD_CAP,
+            "champion_id": (ch or {}).get("id"),
+            "champion_trades": int((ch or {}).get("trades") or 0),
+        }
         return {
             "generation": self.generation,
             "settled_rounds": self.settled_rounds,
             "rounds_since_evolve": self.rounds_since_evolve,
             "evolve_every": int(self.cfg["evolve_every"]),
             "pop_size": len(self.pop),
+            "min_champion_trades": GENETIC_MIN_CHAMPION_TRADES,
             "decision": self.last_decision,
             "decision_reason": self.last_reason,
             "best": best,
+            "live_params": live_params,
             "leaderboard": rows,
         }
 
@@ -353,6 +421,8 @@ class GeneticEngine:
         self.last_reason = blob.get("last_reason") or ""
         if isinstance(blob.get("cfg"), dict):
             self.cfg.update({k: blob["cfg"][k] for k in self.cfg if k in blob["cfg"]})
+            if float(self.cfg.get("evolve_every") or 0) == 12:
+                self.cfg["evolve_every"] = 40
         pop = []
         for raw in blob.get("pop") or []:
             try:
@@ -373,3 +443,5 @@ class GeneticEngine:
                 continue
         self.pop = pop
         self._ensure_pop()
+        # Persist clamped genes so a restart keeps the new min_ask / window / cap bounds.
+        self.save()

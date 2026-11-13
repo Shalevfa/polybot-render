@@ -1034,7 +1034,7 @@ class Genetic(Strategy):
     cap = 10.0
     left_lo = 5
     left_hi = 75
-    MIN_ASK = 0.03
+    MIN_ASK = 0.30
     MAX_ASK = 0.97
 
     def __init__(self):
@@ -1159,8 +1159,19 @@ class Bot:
             base = HunterConfig()
             merged = {**{f: getattr(base, f) for f in base.__dataclass_fields__}, **kw}
             st.hunter.config = HunterConfig(**{k: merged[k] for k in base.__dataclass_fields__})
-        if st.name == "genetic" and getattr(st, "engine", None):
-            st.engine.configure(cfg)
+        if st.name == "genetic":
+            migrated = bot_settings.migrate_genetic_cfg(cfg)
+            if migrated:
+                cfg = migrated
+                self.settings[st.name] = cfg
+                try:
+                    with self.dblock:
+                        bot_settings.save_one(self.c, "genetic", cfg)
+                    bot_settings.request_sync(os.path.dirname(os.path.abspath(STATUS)) if STATUS else ".")
+                except Exception:
+                    pass
+            if getattr(st, "engine", None):
+                st.engine.configure(cfg)
 
     def _can_open(self, st, auto=False):
         try:
@@ -1445,6 +1456,18 @@ class Bot:
                 self.dec(m, s, "skip", why)
             return
         side, prob, edge, a = ch
+        if s.name != "manual":
+            cfg = self._cfg(s.name)
+            if cfg.get("max_price_on"):
+                try:
+                    cap = float(cfg.get("max_price") if cfg.get("max_price") is not None else 0.48)
+                except (TypeError, ValueError):
+                    cap = 0.48
+                eff = Strategy.eff(a)
+                if eff > cap:
+                    self.count_skip(m, s, "max_price")
+                    self.dec(m, s, "skip", f"[max_price] מחיר מעל המקסימום ask={a:.3f} eff={eff:.3f} > {cap:.3f}")
+                    return
         if s.name not in ("every_round", "latency_hunter"):
             g = self.guard(m, s, mp, books, left, side, prob, a)
             if g:
@@ -1459,6 +1482,17 @@ class Bot:
             stake = min(s.cap, max(s.min_stake, 0.10 * bank), bank)
         elif s.name == "naive_momentum":
             stake = min(s.cap, bank)
+        elif s.name == "genetic":
+            from genetic_engine import size_stake as _genetic_size
+            genome = None
+            if getattr(s, "engine", None) and s.engine.champion():
+                genome = s.engine.champion()["genome"]
+            if not genome:
+                genome = {
+                    "cap": getattr(s, "cap", 10), "cash_frac_cap": getattr(s, "cash_frac_cap", 0.12),
+                    "kelly": getattr(s, "kelly", 0.5), "min_stake": 3.0, "min_edge": getattr(s, "min_edge", 0.04),
+                }
+            stake = _genetic_size(genome, bank, prob, a)
         else:
             q = Strategy.eff(a)
             b = (1 - q) / q
@@ -1484,7 +1518,10 @@ class Bot:
             maxp = min(s.MAX_ASK, prob - s.min_edge / 2, a + 0.03)
             fill = simulate_buy(books[side][0], stake, maxp)
         else:
-            maxp = 0.86 if s.name == "naive_momentum" else min(0.97, prob - s.min_edge / 2, a + 0.03)
+            min_edge = s.min_edge
+            if s.name == "genetic" and getattr(s, "engine", None) and s.engine.champion():
+                min_edge = s.engine.champion()["genome"].get("min_edge", min_edge)
+            maxp = 0.86 if s.name == "naive_momentum" else min(0.97, prob - min_edge / 2, a + 0.03)
             fill = simulate_buy(books[side][0], stake, maxp)
         if not fill:
             self.count_skip(m, s, "no_fill")

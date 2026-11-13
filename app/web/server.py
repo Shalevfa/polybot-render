@@ -130,6 +130,7 @@ SKIP_HE = {
     "no_model": "אין מודל",
     "no_book": "אין ספר פקודות",
     "price_too_high": "המחיר גבוה מדי",
+    "max_price": "מחיר מעל המקסימום",
     "strategy_disagree": "המודל והספר לא מסכימים",
     "book_disagree": "אי-הסכמה עם הספר",
     "strategy_other": "התנאים לא התקיימו",

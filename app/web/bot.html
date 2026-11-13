@@ -165,6 +165,9 @@
     </div>
     <div class="gene-dec wait" id="geneDec">WAIT</div>
     <p class="note" id="geneReason"></p>
+    <h2 style="margin-top:14px">פרמטרים שבתוקף עכשיו</h2>
+    <div class="params" id="geneLive">—</div>
+    <p class="note">אלה הגנים של האלופה שקובעים מתי היא נכנסת וכמה היא קונה. ערכי הטופס למטה הם ברירת המחדל והגדרות האבולוציה; חלון הכניסה, מחיר המינימום והגודל החיים מגיעים מהאלופה.</p>
     <h2 style="margin-top:14px">האלופה הנוכחית</h2>
     <div class="params" id="geneBest">—</div>
     <h2 style="margin-top:14px">לוח מובילים</h2>
@@ -331,9 +334,13 @@ function renderFields(schema, settings) {
   const skip = new Set(["enabled", "auto_trading", "risk_management", "alerts"]);
   el.innerHTML = (schema || []).filter(f => !skip.has(f.key)).map(f => {
     const val = settings && settings[f.key] != null ? settings[f.key] : f.default;
+    if (f.type === "bool") {
+      const on = val ? "checked" : "";
+      return `<label class="fld switch-line"><span>${f.label_he}</span><input type="checkbox" data-key="${f.key}" ${on}/></label>`;
+    }
     const lo = f.min != null ? `min="${f.min}"` : "";
     const hi = f.max != null ? `max="${f.max}"` : "";
-    const step = f.key.indexOf("edge") >= 0 || f.key.indexOf("ask") >= 0 || f.key === "w" || f.key.indexOf("loss") >= 0 || f.key.indexOf("profit") >= 0 || f.key.indexOf("frac") >= 0 || f.key === "kelly" || f.key === "min_confidence" ? "0.01" : "1";
+    const step = f.key.indexOf("edge") >= 0 || f.key.indexOf("ask") >= 0 || f.key === "w" || f.key.indexOf("loss") >= 0 || f.key.indexOf("profit") >= 0 || f.key.indexOf("frac") >= 0 || f.key === "kelly" || f.key === "min_confidence" || f.key === "max_price" ? "0.01" : "1";
     return `<label class="fld">${f.label_he}<input type="number" data-key="${f.key}" ${lo} ${hi} step="${step}" value="${val}"/></label>`;
   }).join("");
 }
@@ -341,6 +348,10 @@ function renderFields(schema, settings) {
 function collectSettings(schema, base) {
   const out = Object.assign({}, base || {});
   for (const inp of document.querySelectorAll("#fields input[data-key]")) {
+    if (inp.type === "checkbox") {
+      out[inp.dataset.key] = inp.checked;
+      continue;
+    }
     const v = inp.value;
     out[inp.dataset.key] = v === "" ? null : Number(v);
   }
@@ -406,6 +417,22 @@ function renderGenetic(s) {
   document.getElementById("geneBest").innerHTML = bits
     ? `${head} · PnL ${fmtUsd(best.pnl)}$ · ${best.trades || 0} עסקאות<br>${bits}`
     : "עדיין אין אלופה — האוכלוסייה תתחיל בסיבובים הבאים.";
+  const lp = g.live_params || {};
+  const liveEl = document.getElementById("geneLive");
+  if (liveEl) {
+    if (lp.left_hi != null) {
+      const ask = lp.min_ask != null ? Math.round(Number(lp.min_ask) * 100) : "—";
+      liveEl.innerHTML = [
+        `<b>חלון כניסה</b> ${Number(lp.left_lo).toFixed(0)}–${Number(lp.left_hi).toFixed(0)} שניות לסיום`,
+        `<b>מחיר היצע מינימלי</b> ${ask}¢ (בלי כרטיסים זולים יותר)`,
+        `<b>גודל עסקה</b> קלי ${Number(lp.kelly).toFixed(2)} · עד ${Math.round((lp.cash_frac_cap || 0) * 1000) / 10}% מהקופה · תקרה $${Number(lp.cap).toFixed(0)} · מינימום $${Number(lp.min_stake).toFixed(0)} · תקרה קשיחה $${Number(lp.hard_cap).toFixed(0)}`,
+        `<b>יתרון מינימלי</b> ${Number(lp.min_edge).toFixed(3)}`,
+        `<b>עסקאות צל של האלופה</b> ${lp.champion_trades != null ? lp.champion_trades : "—"}`,
+      ].join("<br>");
+    } else {
+      liveEl.textContent = "ממתין לגנום אלופה.";
+    }
+  }
   const rows = g.leaderboard || [];
   document.getElementById("geneBoard").innerHTML = rows.map((r, i) => {
     const mark = r.champion ? "★ אלופה" : (i + 1);

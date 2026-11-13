@@ -45,57 +45,71 @@ RANGES = {
     "pop_size": (4.0, 30.0),
     "evolve_every": (4.0, 100.0),
     "mutation_rate": (0.05, 0.80),
+    "max_price": (0.10, 0.99),
 }
 
-BOOLS = ("enabled", "auto_trading", "risk_management", "alerts")
+# Genetic-only gene bounds (do not change other bots).
+# min_ask >= 0.30 blocks cheap longshots; left_hi <= 80 keeps entry in the last ~75s;
+# cap <= 10 is the hard dollar ceiling used in live and shadow sizing.
+GENETIC_RANGE_OVERRIDES = {
+    "min_ask": (0.30, 0.50),
+    "left_lo": (5.0, 50.0),
+    "left_hi": (20.0, 80.0),
+    "cap": (1.0, 10.0),
+}
+
+# Shadow trades required before a genome may become champion.
+GENETIC_MIN_CHAMPION_TRADES = 8
+
+BOOLS = ("enabled", "auto_trading", "risk_management", "alerts", "max_price_on")
 
 # Current windows / params — must equal today's live values.
 STRATEGY_DEFAULTS = {
     "late_model": {
         "enabled": True, "auto_trading": True, "risk_management": False, "alerts": False,
+        "max_price_on": False, "max_price": 0.48,
         "min_edge": 0.04, "max_disagree": 0.30, "w": 0.6, "kelly": 0.50,
         "cash_frac_cap": 0.12, "min_stake": 3.0, "cap": 10.0,
-        "left_lo": 5.0, "left_hi": 75.0, "stop_loss": 0.0, "take_profit": 0.0,
-    },
+        "left_lo": 5.0, "left_hi": 75.0, "stop_loss": 0.0, "take_profit": 0.0,},
     "late_model_raw": {
         "enabled": True, "auto_trading": True, "risk_management": False, "alerts": False,
+        "max_price_on": False, "max_price": 0.48,
         "min_edge": 0.05, "max_disagree": 9.0,  # effectively unused (shadow)
         "w": 1.0, "kelly": 0.50, "cash_frac_cap": 0.12, "min_stake": 3.0, "cap": 10.0,
-        "left_lo": 5.0, "left_hi": 75.0, "stop_loss": 0.0, "take_profit": 0.0,
-    },
+        "left_lo": 5.0, "left_hi": 75.0, "stop_loss": 0.0, "take_profit": 0.0,},
     "early_value": {
         "enabled": True, "auto_trading": True, "risk_management": False, "alerts": False,
+        "max_price_on": False, "max_price": 0.48,
         "min_edge": 0.06, "kelly": 0.4, "cap": 6.0, "cash_frac_cap": 0.08,
         "max_disagree": 0.25, "w": 0.5, "min_stake": 3.0,
-        "el_lo": 60.0, "el_hi": 210.0, "stop_loss": 0.0, "take_profit": 0.0,
-    },
+        "el_lo": 60.0, "el_hi": 210.0, "stop_loss": 0.0, "take_profit": 0.0,},
     "naive_momentum": {
         "enabled": True, "auto_trading": True, "risk_management": False, "alerts": False,
+        "max_price_on": False, "max_price": 0.48,
         "cap": 5.0, "kelly": 0.25, "min_edge": 0.04, "min_stake": 1.0,
         "left_lo": 50.0, "left_hi": 65.0, "max_ask": 0.85,
-        "stop_loss": 0.0, "take_profit": 0.0,
-    },
+        "stop_loss": 0.0, "take_profit": 0.0,},
     "every_round": {
         "enabled": True, "auto_trading": True, "risk_management": False, "alerts": False,
+        "max_price_on": False, "max_price": 0.48,
         "cap": 10.0, "min_edge": 0.0, "kelly": 0.0, "min_stake": 1.0,
         "preferred_left_hi": 150.0, "preferred_left_lo": 20.0, "fallback_left_min": 5.0,
         "max_ask": 0.95, "left_lo": 5.0, "left_hi": 150.0,
-        "stop_loss": 0.0, "take_profit": 0.0,
-    },
+        "stop_loss": 0.0, "take_profit": 0.0,},
     "momentum_late": {
         "enabled": True, "auto_trading": True, "risk_management": False, "alerts": False,
+        "max_price_on": False, "max_price": 0.48,
         "min_edge": 0.04, "cross_edge": 0.06, "kelly": 0.50, "cash_frac_cap": 0.12,
         "min_stake": 3.0, "max_disagree": 0.30, "max_ask": 0.95, "min_ask": 0.03,
-        "left_lo": 10.0, "left_hi": 90.0, "stop_loss": 0.0, "take_profit": 0.0,
-    },
+        "left_lo": 10.0, "left_hi": 90.0, "stop_loss": 0.0, "take_profit": 0.0,},
     "latency_hunter": {
         "enabled": True, "auto_trading": True, "risk_management": False, "alerts": False,
+        "max_price_on": False, "max_price": 0.48,
         "min_edge": 0.06, "kelly": 0.50, "cash_frac_cap": 0.08, "min_stake": 3.0,
         "typical_stake": 8.0, "left_lo": 20.0, "left_hi": 300.0,
         "min_net_edge": 0.06, "min_confidence": 0.60, "max_token_spread": 0.04,
         "min_seconds_remaining": 20.0, "cooldown_seconds": 20.0,
-        "stop_loss": 0.0, "take_profit": 0.0,
-    },
+        "stop_loss": 0.0, "take_profit": 0.0,},
     "manual": {
         "enabled": True, "auto_trading": False, "risk_management": False, "alerts": False,
         "min_edge": 0.0, "kelly": 0.0, "cap": 20.0, "cash_frac_cap": 1.0, "min_stake": 1.0,
@@ -103,12 +117,12 @@ STRATEGY_DEFAULTS = {
     },
     "genetic": {
         "enabled": True, "auto_trading": True, "risk_management": False, "alerts": False,
+        "max_price_on": False, "max_price": 0.48,
         "min_edge": 0.04, "max_disagree": 0.30, "w": 0.6, "kelly": 0.50,
         "cash_frac_cap": 0.12, "min_stake": 3.0, "cap": 10.0,
-        "left_lo": 5.0, "left_hi": 75.0, "min_ask": 0.03, "max_ask": 0.97,
-        "pop_size": 10.0, "evolve_every": 12.0, "mutation_rate": 0.20,
-        "stop_loss": 0.0, "take_profit": 0.0,
-    },
+        "left_lo": 5.0, "left_hi": 75.0, "min_ask": 0.30, "max_ask": 0.97,
+        "pop_size": 10.0, "evolve_every": 40.0, "mutation_rate": 0.20,
+        "stop_loss": 0.0, "take_profit": 0.0,},
 }
 
 # late_model_raw.max_disagree is 9 (sentinel). Allow a wider range just for that field when name matches.
@@ -149,12 +163,54 @@ FIELD_LABELS_HE = {
     "pop_size": "גודל האוכלוסייה",
     "evolve_every": "אבולוציה כל כמה סיבובים",
     "mutation_rate": "שיעור מוטציה",
+    "max_price_on": "הגבלת מחיר כניסה מקסימלי",
+    "max_price": "מחיר כניסה מקסימלי (פי 2 = 0.48)",
 }
 
 HUNTER_CONFIG_KEYS = (
     "min_net_edge", "min_confidence", "max_token_spread",
     "min_seconds_remaining", "cooldown_seconds",
 )
+
+
+def ranges_for(name: str, key: str) -> tuple[float | None, float | None]:
+    if name == "genetic" and key in GENETIC_RANGE_OVERRIDES:
+        return GENETIC_RANGE_OVERRIDES[key]
+    lo_hi = RANGES.get(key)
+    if lo_hi is None:
+        return (None, None)
+    lo, hi = lo_hi
+    if name == "late_model_raw" and key == "max_disagree":
+        hi = RAW_DISAGREE_MAX
+    return (lo, hi)
+
+
+def migrate_genetic_cfg(cfg: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Clamp genetic settings to the new bounds. Bump evolve_every 12 -> 40 once.
+    Returns a new dict if anything changed, else None."""
+    if not cfg:
+        return None
+    out = dict(cfg)
+    changed = False
+    for k, (lo, hi) in GENETIC_RANGE_OVERRIDES.items():
+        if k not in out:
+            continue
+        try:
+            v = float(out[k])
+        except (TypeError, ValueError):
+            continue
+        nv = min(hi, max(lo, v))
+        if nv != v:
+            out[k] = nv
+            changed = True
+    try:
+        ev = float(out.get("evolve_every", 40))
+    except (TypeError, ValueError):
+        ev = 40.0
+    if ev == 12.0:
+        out["evolve_every"] = 40.0
+        changed = True
+    return out if changed else None
 
 
 def defaults_for(name: str) -> dict[str, Any]:
@@ -172,9 +228,7 @@ def schema_for(name: str) -> list[dict[str, Any]]:
             item["type"] = "bool"
         else:
             item["type"] = "number"
-            lo, hi = RANGES.get(key, (None, None))
-            if name == "late_model_raw" and key == "max_disagree":
-                hi = RAW_DISAGREE_MAX
+            lo, hi = ranges_for(name, key)
             item["min"] = lo
             item["max"] = hi
         out.append(item)
@@ -224,9 +278,7 @@ def validate(name: str, payload: dict[str, Any], base: dict[str, Any] | None = N
             raise ValueError(f"{k} must be a number") from None
         if not (v == v) or v in (float("inf"), float("-inf")):
             raise ValueError(f"{k} must be finite")
-        lo, hi = RANGES.get(k, (None, None))
-        if name == "late_model_raw" and k == "max_disagree":
-            hi = RAW_DISAGREE_MAX
+        lo, hi = ranges_for(name, k)
         if lo is not None and v < lo:
             raise ValueError(f"{k} must be >= {lo}")
         if hi is not None and v > hi:
