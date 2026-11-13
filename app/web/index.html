@@ -375,13 +375,14 @@ function drawChart(d) {
   const w = d.window || {};
   const start = w.start, end = w.end, open = w.open_px;
   const series = d.series || [];
+  const seriesForScale = d.seriesRaw || series;
   const markers = d.markers || [];
   const padL = 62, padR = 12, padT = 10, padB = 22;
   const iw = cssW - padL - padR, ih = cssH - padT - padB;
 
   let ys = [];
   if (open != null) ys.push(open);
-  for (const p of series) {
+  for (const p of seriesForScale) {
     if (p.nowcast != null) ys.push(p.nowcast);
     if (p.btc != null) ys.push(p.btc);
   }
@@ -546,6 +547,135 @@ function renderTrades(rows) {
   }).join("");
 }
 
+
+let chartData = null;
+let chartRaf = 0;
+let chartLastPaint = 0;
+let chartServerNow = 0;
+let chartServerPerf = 0;
+let chartTipY = null;
+let chartWinStart = null;
+
+function chartClock() {
+  if (!chartServerNow) return Date.now() / 1000;
+  return chartServerNow + (performance.now() - chartServerPerf) / 1000;
+}
+
+function syncChart(d) {
+  chartData = d;
+  if (d && d.now) {
+    const predicted = chartClock();
+    if (!chartServerNow || d.now >= predicted - 0.05) {
+      chartServerNow = d.now;
+      chartServerPerf = performance.now();
+    }
+  }
+  const start = d && d.window && d.window.start;
+  if (start != null && start !== chartWinStart) {
+    chartWinStart = start;
+    chartTipY = null;
+  }
+  startChartAnim();
+}
+
+function startChartAnim() {
+  if (document.hidden) return;
+  if (chartRaf) return;
+  const loop = (ts) => {
+    chartRaf = 0;
+    if (document.hidden) return;
+    const mobile = window.innerWidth <= 840 || (window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
+    const minDt = 1000 / (mobile ? 30 : 48);
+    if (!chartLastPaint || ts - chartLastPaint >= minDt) {
+      paintChart(ts);
+    }
+    chartRaf = requestAnimationFrame(loop);
+  };
+  chartRaf = requestAnimationFrame(loop);
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    if (chartRaf) cancelAnimationFrame(chartRaf);
+    chartRaf = 0;
+  } else {
+    chartLastPaint = 0;
+    startChartAnim();
+  }
+});
+
+function priceOf(p) {
+  const v = p.nowcast ?? p.btc;
+  return v != null ? v : null;
+}
+
+function valueAt(pts, t) {
+  if (!pts.length) return null;
+  if (t <= pts[0].t) return priceOf(pts[0]);
+  const last = pts[pts.length - 1];
+  if (t >= last.t) return priceOf(last);
+  for (let i = 1; i < pts.length; i++) {
+    if (t <= pts[i].t) {
+      const a = pts[i - 1], b = pts[i];
+      const ya = priceOf(a), yb = priceOf(b);
+      const f = (t - a.t) / Math.max(1e-6, b.t - a.t);
+      return ya + (yb - ya) * f;
+    }
+  }
+  return priceOf(last);
+}
+
+function paintChart(ts) {
+  if (!chartData) return;
+  const dt = chartLastPaint ? Math.min(0.05, (ts - chartLastPaint) / 1000) : 0.016;
+  chartLastPaint = ts || performance.now();
+  const d = chartData;
+  const w = d.window || {};
+  const start = w.start, end = w.end;
+  const real = (d.series || []).filter(p => priceOf(p) != null && (start == null || p.t >= start) && (end == null || p.t <= end + 1));
+  let displayNow = chartClock();
+  if (start != null && displayNow < start) displayNow = start;
+  if (end != null && displayNow > end) displayNow = end;
+
+  const targetY = valueAt(real, displayNow);
+  if (targetY != null) {
+    if (chartTipY == null || !isFinite(chartTipY)) chartTipY = targetY;
+    else {
+      const a = 1 - Math.exp(-dt / 0.16);
+      chartTipY += (targetY - chartTipY) * a;
+      if (Math.abs(chartTipY - targetY) < 0.005) chartTipY = targetY;
+    }
+  }
+
+  // Real points stay exact. Only the tip after the last committed point is visual.
+  const committed = [];
+  for (const p of real) {
+    if (p.t <= displayNow + 1e-6) committed.push(p);
+    else break;
+  }
+  // Keep the newest arrived point out of the polyline until the tip has reached it,
+  // so the last segment glides instead of jumping.
+  let held = null;
+  if (committed.length) {
+    const last = committed[committed.length - 1];
+    const arrived = displayNow >= last.t - 0.01 && chartTipY != null && Math.abs(chartTipY - priceOf(last)) < 0.02;
+    if (!arrived && committed.length >= 2) {
+      held = committed.pop();
+    }
+  }
+  const vis = committed.map(p => p);
+  if (targetY != null && (start == null || end == null || (end > start))) {
+    const tipT = displayNow;
+    const lastC = vis.length ? vis[vis.length - 1] : null;
+    if (!lastC || tipT > lastC.t + 1e-4) {
+      vis.push({ t: tipT, nowcast: chartTipY, btc: chartTipY });
+    } else if (held && tipT > lastC.t + 1e-4) {
+      vis.push({ t: tipT, nowcast: chartTipY, btc: chartTipY });
+    }
+  }
+  drawChart(Object.assign({}, d, { series: vis, seriesRaw: d.series || [] }));
+}
+
 function apply(d) {
   const w = d.window || {}, f = d.feed || {}, book = d.book || {};
   const px = w.nowcast ?? w.btc;
@@ -601,7 +731,7 @@ function apply(d) {
 
   renderTeam(d.strategies);
   renderTrades(d.recent);
-  drawChart(d);
+  syncChart(d);
   document.getElementById("err").textContent = "";
   if (d.html_version) {
     if (htmlVer && d.html_version !== htmlVer) {
@@ -680,7 +810,7 @@ function watchLive() {
 }
 
 watchLive();
-window.addEventListener("resize", () => { /* next tick redraws */ });
+window.addEventListener("resize", () => { chartLastPaint = 0; if (chartData) paintChart(performance.now()); });
 </script>
 </body>
 </html>
